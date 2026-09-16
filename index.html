@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Flow PM: dal prototipo alla pubblicazione</title>
+<title>Snaproof Flow PM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -267,7 +267,7 @@ nav.tabs .secondary-tab{font-size:.86rem;font-weight:500;padding:8px 10px}
       </section>
       <section>
         <h3>Collegare Supabase</h3>
-        <p>Nel file HTML, compila <b>SUPABASE_URL</b> e <b>SUPABASE_ANON_KEY</b> in cima allo script. Con Supabase attivo, l'accesso usa gli utenti Supabase (email e password) al posto della chiave condivisa. Esegui questo SQL nel progetto:</p>
+        <p>Il tool è collegato al progetto Supabase <b>snapflow</b>. Dati in <b>pm_items</b>, storico in <b>pm_events</b>, archivio in <b>pm_directory</b>, file nel bucket <b>attachments</b>. Utenti in Authentication → Users, email definite in <b>USER_EMAILS</b> in cima allo script. Schema di base:</p>
 <pre class="sql" id="sqlBox">create table if not exists pm_items (
   id text primary key,
   col text not null,
@@ -291,9 +291,12 @@ alter publication supabase_realtime add table pm_items;</pre>
 
 <script>
 /* ============ CONFIG ============ */
-const SUPABASE_URL = "";      // es. https://xxxx.supabase.co
-const SUPABASE_ANON_KEY = ""; // chiave anon pubblica
-const USERS = ["Edoardo","Simone","Alex"];
+const SUPABASE_URL = "https://aabyyltreqremcnxckfc.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_Tf0nI4ofysEcix_ySP3SSQ_eaS5XiVN"; // chiave pubblicabile: la sicurezza è nella RLS
+// Utenti: nome visualizzato -> email dell'utente creato in Supabase Authentication
+const USER_EMAILS = { Edoardo:"edoardo@snapflow.team", Simone:"simone@snapflow.team", Alex:"alex@snapflow.team" };
+const USERS = Object.keys(USER_EMAILS);
+const BUCKET = "attachments";
 const PW_HASH = "d8893b3fc2803cc2596e90d05be81f0dd4b74b7388e408c381097716e00b225d"; // SHA-256 della chiave condivisa
 /* ================================= */
 
@@ -302,6 +305,7 @@ const STATUSES = [["todo","Da fare"],["doing","In corso"],["review","In revision
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16)));
 const S = {}; COLS.forEach(c => S[c] = {});
 let store = null, me = "", supa = null;
 
@@ -415,35 +419,75 @@ function makeClaudeStore(db){
 function makeSupaStore(client){
   const cache={}; COLS.forEach(c=>cache[c]={}); const subs={};
   const emit=c=>subs[c]&&subs[c](cache[c]);
-  return { name:"Supabase", live:true,
+  const err=(e)=>{ if(e){ console.error(e); toast("Errore Supabase: "+e.message); } };
+  // mappature tabelle dedicate
+  const evFrom=r=>({id:r.id,at:r.at,by:r.actor,text:r.action,entity:r.entity||"",ref:r.entity_id||""});
+  const dirFrom=r=>({id:r.id,title:r.title,url:r.url||"",storage_path:r.storage_path||"",kind:r.kind,phase:r.phase||"",task:r.task_id||"",note:r.note||"",by:r.created_by||"",at:r.created_at});
+  const dirTo=a=>({id:a.id,title:a.title||a.url||"Senza titolo",url:a.url||null,storage_path:a.storage_path||null,kind:a.kind||"link",phase:a.phase||null,task_id:a.task||null,note:a.note||null,created_by:a.by||me,created_at:a.at||new Date().toISOString()});
+  return { name:"Supabase", live:true, supa:true,
     async init(){
-      const {data,error}=await client.from("pm_items").select("id,col,data"); if(error) throw error;
-      data.forEach(r=>{ if(cache[r.col]) cache[r.col][r.data.id]=r.data; });
-      client.channel("pm").on("postgres_changes",{event:"*",schema:"public",table:"pm_items"},p=>{
-        if(p.eventType==="DELETE"){ const [c,...rest]=String(p.old.id).split(":"); if(cache[c]){ delete cache[c][rest.join(":")]; emit(c);} }
-        else { const r=p.new; if(cache[r.col]){ cache[r.col][r.data.id]=r.data; emit(r.col);} }
-      }).subscribe();
+      const [it,ev,dr]=await Promise.all([
+        client.from("pm_items").select("id,col,data"),
+        client.from("pm_events").select("*").order("at",{ascending:false}).limit(1000),
+        client.from("pm_directory").select("*")]);
+      for(const r of [it,ev,dr]) if(r.error) throw r.error;
+      it.data.forEach(r=>{ if(cache[r.col]) cache[r.col][r.data.id]=r.data; });
+      ev.data.forEach(r=>{ cache.activity[r.id]=evFrom(r); });
+      dr.data.forEach(r=>{ cache.archive[r.id]=dirFrom(r); });
+      client.channel("pm-live")
+        .on("postgres_changes",{event:"*",schema:"public",table:"pm_items"},p=>{
+          if(p.eventType==="DELETE"){ const [c,...rest]=String(p.old.id).split(":"); if(cache[c]){ delete cache[c][rest.join(":")]; emit(c);} }
+          else { const r=p.new; if(cache[r.col]){ cache[r.col][r.data.id]=r.data; emit(r.col);} } })
+        .on("postgres_changes",{event:"INSERT",schema:"public",table:"pm_events"},p=>{ cache.activity[p.new.id]=evFrom(p.new); emit("activity"); })
+        .on("postgres_changes",{event:"*",schema:"public",table:"pm_directory"},p=>{
+          if(p.eventType==="DELETE"){ delete cache.archive[p.old.id]; } else cache.archive[p.new.id]=dirFrom(p.new); emit("archive"); })
+        .subscribe();
     },
-    empty:async()=>COLS.every(c=>!Object.keys(cache[c]).length),
+    empty:async()=>["phases","steps","glossary","roles"].every(c=>!Object.keys(cache[c]).length),
     subscribe(col,cb){ subs[col]=cb; cb(cache[col]); },
-    async put(col,obj){ cache[col][obj.id]=obj; emit(col); const {error}=await client.from("pm_items").upsert({id:col+":"+obj.id,col,data:obj,updated_at:new Date().toISOString()}); if(error) toast("Errore Supabase: "+error.message); },
-    async del(col,id){ delete cache[col][id]; emit(col); const {error}=await client.from("pm_items").delete().eq("id",col+":"+id); if(error) toast("Errore Supabase: "+error.message); } };
+    async put(col,obj){
+      if(col==="activity"){ const {data,error}=await client.from("pm_events").insert({actor:obj.by||me,action:obj.text,entity:obj.entity||null,entity_id:obj.ref||null}).select().single(); err(error); if(data){ cache.activity[data.id]=evFrom(data); emit("activity"); } return; }
+      if(col==="archive"){ cache.archive[obj.id]=obj; emit("archive"); const {error}=await client.from("pm_directory").upsert(dirTo(obj)); err(error); return; }
+      cache[col][obj.id]=obj; emit(col);
+      const {error}=await client.from("pm_items").upsert({id:col+":"+obj.id,col,data:obj,updated_at:new Date().toISOString()}); err(error); },
+    async del(col,id){
+      if(col==="activity") return; // lo storico non si cancella
+      if(col==="archive"){ const a=cache.archive[id]; delete cache.archive[id]; emit("archive");
+        if(a&&a.storage_path){ const r=await client.storage.from(BUCKET).remove([a.storage_path]); err(r.error); }
+        const {error}=await client.from("pm_directory").delete().eq("id",id); err(error); return; }
+      delete cache[col][id]; emit(col);
+      const {error}=await client.from("pm_items").delete().eq("id",col+":"+id); err(error); },
+    async upload(file, folder){
+      const safe=file.name? file.name.replace(/[^A-Za-z0-9._-]+/g,"_").slice(-80) : "file";
+      const path=`${folder}/${uuid()}-${safe}`;
+      const {error}=await client.storage.from(BUCKET).upload(path,file,{contentType:file.type||undefined,upsert:false});
+      if(error){ err(error); return null; } return path; },
+    async signed(path){ const {data,error}=await client.storage.from(BUCKET).createSignedUrl(path,3600); err(error); return data?.signedUrl||""; } };
 }
+
+// URL firmati con cache (1 h)
+const signedCache={};
+async function fileUrl(path){ if(!store?.signed) return ""; const c=signedCache[path]; if(c&&c.exp>Date.now()) return c.url; const url=await store.signed(path); signedCache[path]={url,exp:Date.now()+50*60*1000}; return url; }
+const isStorage = v => typeof v==="string" && v.startsWith("storage:");
+function hydrateImages(root){ (root||document).querySelectorAll("img[data-sp]").forEach(async im=>{ const u=await fileUrl(im.dataset.sp); if(u) im.src=u; }); }
+const imgTag=(src,attrs)=> isStorage(src) ? `<img data-sp="${esc(src.slice(8))}" alt="" ${attrs||""}>` : `<img src="${esc(src)}" alt="" ${attrs||""}>`;
 
 /* ============ AUTH ============ */
 async function sha256(t){ const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join(""); }
-const useSupa = !!(SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase);
-if(useSupa){ supa=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY); $("#emailField").classList.remove("hidden"); $("#gateHint").textContent="Accedi con il tuo utente Supabase."; }
+const inClaude = !!(window.claude && window.claude.use) || /claude\.ai|claudeusercontent/.test(location.hostname);
+const useSupa = !inClaude && !!(SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase);
+if(useSupa){ supa=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY); }
 $("#gUser").innerHTML=USERS.map(u=>`<option>${u}</option>`).join("");
 if(ls("flowpm:name")&&USERS.includes(ls("flowpm:name"))) $("#gUser").value=ls("flowpm:name");
-if(useSupa) $("#userField").classList.add("hidden");
 
 $("#gateForm").addEventListener("submit", async e=>{
   e.preventDefault(); $("#gateErr").textContent="";
-  const pw=$("#gPw").value; const nm=useSupa?$("#gEmail").value.trim().split("@")[0]:$("#gUser").value;
+  const pw=$("#gPw").value; const nm=$("#gUser").value;
   if(useSupa){
-    const {error}=await supa.auth.signInWithPassword({email:$("#gEmail").value.trim(),password:pw});
-    if(error){ $("#gateErr").textContent="Accesso non riuscito: "+error.message; return; }
+    const btn=e.submitter; if(btn) btn.disabled=true;
+    const {error}=await supa.auth.signInWithPassword({email:USER_EMAILS[nm],password:pw});
+    if(btn) btn.disabled=false;
+    if(error){ $("#gateErr").textContent = /invalid/i.test(error.message) ? "Password errata o utente non ancora creato." : "Accesso non riuscito: "+error.message; return; }
   } else {
     if(await sha256(pw)!==PW_HASH){ $("#gateErr").textContent="Chiave di accesso errata."; return; }
     ss("flowpm:auth",nm);
@@ -458,7 +502,7 @@ $("#settingsBtn").onclick=()=>{ const on=$("#tab-settings").classList.contains("
   $("#settingsBtn").setAttribute("aria-pressed",on); };
 
 (async()=>{
-  if(useSupa){ const {data}=await supa.auth.getSession(); if(data.session){ me=(data.session.user.email||"utente").split("@")[0]; start(); } }
+  if(useSupa){ const {data}=await supa.auth.getSession(); if(data.session){ const em=data.session.user.email; me=Object.keys(USER_EMAILS).find(k=>USER_EMAILS[k]===em)||(em||"utente").split("@")[0]; start(); } }
   else { const u=ss("flowpm:auth"); if(u&&USERS.includes(u)){ me=u; start(); } }
 })();
 
@@ -470,7 +514,7 @@ async function start(){
     if(useSupa){ store=makeSupaStore(supa); await store.init(); }
     else if(window.claude && window.claude.use){ const db=await window.claude.use("db"); store = db ? makeClaudeStore(db) : makeLocalStore(); }
     else store=makeLocalStore();
-  }catch(err){ toast("Supabase non raggiungibile, uso archivio locale"); store=makeLocalStore(); }
+  }catch(err){ console.error(err); $("#mode").querySelector("span").textContent="Errore connessione"; toast("Supabase non raggiungibile: "+(err.message||err)); return; }
   const m=$("#mode"); m.querySelector("span").textContent=store.name; m.classList.toggle("live",store.live);
   if(await store.empty()){
     const s=seed();
@@ -486,7 +530,7 @@ const arr = (c,key="order") => Object.values(S[c]).sort((a,b)=>(a[key]??0)-(b[ke
 const roleById = id => S.roles[id];
 const roleTags = ids => (ids||[]).map(id=>{ const r=roleById(id); return r?`<span class="r c${r.color%4}">${esc(r.name)}</span>`:""; }).join("");
 const phaseName = id => S.phases[id]?.name || "Senza fase";
-async function log(text, ref){ await store.put("activity",{id:uid(),at:new Date().toISOString(),by:me,text,ref:ref||""}); }
+async function log(text, ref){ await store.put("activity",{id:uuid(),at:new Date().toISOString(),by:me,text,ref:ref||""}); }
 function fmtDate(iso){ try{ return new Date(iso).toLocaleString("it-IT",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}); }catch(e){ return iso; } }
 
 let termRe=null, termMap={};
@@ -623,30 +667,42 @@ function driveInfo(url){
     if(u.searchParams.get("id")) return {kind:"file",id:u.searchParams.get("id"),embed:`https://drive.google.com/file/d/${u.searchParams.get("id")}/preview`};
   }catch(e){} return null;
 }
-const KIND_ICON={folder:"📁",file:"📄",document:"📝",spreadsheets:"📊",presentation:"📽️",forms:"🗳️",image:"🖼️",link:"🔗"};
-function archKind(url){ const d=driveInfo(url); if(d) return d.kind; if(/\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(url)) return "image"; return "link"; }
+const KIND_ICON={folder:"📁",file:"📄",document:"📝",spreadsheets:"📊",presentation:"📽️",forms:"🗳️",image:"🖼️",link:"🔗",drive_folder:"📁",drive_file:"📄",doc:"📝",sheet:"📊",slides:"📽️",upload:"📎"};
+function archKind(url){ const d=driveInfo(url||""); if(d) return d.kind; if(/\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(url||"")) return "image"; return "link"; }
+const DB_KIND={folder:"drive_folder",file:"drive_file",document:"doc",spreadsheets:"sheet",presentation:"slides",forms:"link",image:"image",link:"link"};
+function itemKind(a){ if(a.storage_path) return a.kind==="image"?"image":"upload"; return archKind(a.url); }
+async function openItem(a){ if(!a.storage_path){ window.open(a.url,"_blank","noopener"); return; } const w=window.open("","_blank"); const u=await fileUrl(a.storage_path); if(w) w.location=u; }
 function renderArchive(){
   const fp=$("#aPhase").value, ft=$("#aText").value.toLowerCase();
   const items=Object.values(S.archive).filter(a=>(!fp||a.phase===fp)&&(!ft||(a.title+" "+a.note+" "+a.url).toLowerCase().includes(ft))).sort((a,b)=>(b.at||"").localeCompare(a.at||""));
-  $("#archive").innerHTML = items.length ? items.map(a=>{ const k=archKind(a.url);
+  $("#archive").innerHTML = items.length ? items.map(a=>{ const k=itemKind(a);
     return `<div class="item"><div class="kind" aria-hidden="true">${KIND_ICON[k]}</div><div class="body">
       <div class="t">${esc(a.title||a.url)}</div>
       <div class="s">${esc(phaseName(a.phase))}${a.task&&S.tasks[a.task]?" · Task: "+esc(S.tasks[a.task].title):""} · ${esc(a.by||"")} · ${fmtDate(a.at)}</div>
       ${a.note?`<div style="margin-top:4px">${linkify(a.note)}</div>`:""}</div>
-      <div class="inline"><button class="btn sm" data-prev="${esc(a.id)}">Anteprima</button><a class="btn sm" href="${esc(a.url)}" target="_blank" rel="noopener">Apri</a><button class="btn ghost sm" data-aedit="${esc(a.id)}">Modifica</button></div></div>`;
+      <div class="inline"><button class="btn sm" data-prev="${esc(a.id)}">Anteprima</button><button class="btn sm" data-open="${esc(a.id)}">Apri</button><button class="btn ghost sm" data-aedit="${esc(a.id)}">Modifica</button></div></div>`;
   }).join("") : `<div class="empty">Archivio vuoto. Aggiungi link a file e cartelle di Google Drive, documenti o risorse.</div>`;
 }
 $("#archive").addEventListener("click",e=>{
   const p=e.target.closest("[data-prev]"); if(p) return openPreview(S.archive[p.dataset.prev]);
+  const o=e.target.closest("[data-open]"); if(o) return openItem(S.archive[o.dataset.open]);
   const m=e.target.closest("[data-aedit]"); if(m) return openArchive(S.archive[m.dataset.aedit]);
 });
 $("#newArchive").onclick=()=>openArchive(null);
 
-function openPreview(a){
+async function openPreview(a){
+  if(a.storage_path){
+    const u=await fileUrl(a.storage_path); let body;
+    if(a.kind==="image") body=`<img class="preview-img" src="${esc(u)}" alt="${esc(a.title)}">`;
+    else if(/\.pdf$/i.test(a.storage_path)) body=`<iframe class="preview" src="${esc(u)}"></iframe>`;
+    else body=`<p class="note-box">Anteprima non disponibile per questo tipo di file. Usa "Apri" per scaricarlo.</p>`;
+    showDlg(esc(a.title||"Anteprima"), body, `<span class="grow"></span><a class="btn" href="${esc(u)}" target="_blank" rel="noopener">Apri in una nuova scheda</a><button class="btn primary" value="close">Chiudi</button>`, null, true);
+    return;
+  }
   const d=driveInfo(a.url); const k=archKind(a.url);
   let body;
   if(d) body=`<iframe class="preview" src="${esc(d.embed)}" allow="autoplay" referrerpolicy="no-referrer"></iframe>
-    <p class="note-box" style="margin-top:10px">Se l'anteprima non compare: il file deve essere condiviso almeno con chi ha il link, oppure devi essere loggato con un account che ha accesso. Nella versione ospitata su claude.ai i frame esterni possono essere bloccati: su GitHub Pages l'anteprima funziona.</p>`;
+    <p class="note-box" style="margin-top:10px">Se l'anteprima non compare: il file deve essere condiviso almeno con chi ha il link, oppure devi essere loggato con un account che ha accesso. Alcuni browser bloccano i cookie di terze parti: in quel caso usa "Apri".</p>`;
   else if(k==="image") body=`<img class="preview-img" src="${esc(a.url)}" alt="${esc(a.title)}">`;
   else body=`<iframe class="preview" src="${esc(a.url)}" referrerpolicy="no-referrer"></iframe><p class="note-box" style="margin-top:10px">Molti siti bloccano l'incorporamento. Usa "Apri" se l'anteprima resta vuota.</p>`;
   showDlg(esc(a.title||"Anteprima"), body, `<span class="grow"></span><a class="btn" href="${esc(a.url)}" target="_blank" rel="noopener">Apri in una nuova scheda</a><button class="btn primary" value="close">Chiudi</button>`, null, true);
@@ -713,7 +769,7 @@ function openTask(t, preset){
     const cks=Object.values(S.checks).filter(c=>c.task===t.id);
     dlgForm.querySelector("#tkChecks").innerHTML = cks.length ? cks.map(c=>`<div class="cl-row"><span>${c.done?"✅":"⬜"}</span><span style="flex:1">${esc(c.title)}</span></div>`).join("") : `<p style="color:var(--muted);margin:0 0 8px">Nessun check collegato.</p>`;
     const links=Object.values(S.archive).filter(a=>a.task===t.id);
-    dlgForm.querySelector("#tkArch").innerHTML = links.length ? links.map(a=>`<div class="cl-row"><span>${KIND_ICON[archKind(a.url)]}</span><a href="${esc(a.url)}" target="_blank" rel="noopener" style="flex:1;overflow-wrap:anywhere">${esc(a.title||a.url)}</a></div>`).join("") : `<p style="color:var(--muted);margin:0 0 8px">Nessun allegato.</p>`;
+    dlgForm.querySelector("#tkArch").innerHTML = links.length ? links.map(a=>`<div class="cl-row"><span>${KIND_ICON[itemKind(a)]}</span><button type="button" class="btn ghost sm" data-open-arch="${esc(a.id)}" style="flex:1;text-align:left;overflow-wrap:anywhere">${esc(a.title||a.url)}</button></div>`).join("") : `<p style="color:var(--muted);margin:0 0 8px">Nessun allegato.</p>`;
   };
   showDlg(isNew?"Nuovo task":"Task",
     `<div class="field"><label>Titolo</label><input type="text" name="title" value="${esc(t.title)}" required></div>
@@ -739,6 +795,7 @@ function openTask(t, preset){
       await log(before? (before.status!==t.status?`ha aggiornato "${t.title}" (stato: ${STATUSES.find(s=>s[0]===t.status)[1]})`:`ha modificato il task "${t.title}"`) : `ha creato il task "${t.title}"`);
     });
   renderSubs();
+  dlgForm.querySelector("#tkArch").addEventListener("click",e=>{ const b=e.target.closest("[data-open-arch]"); if(b) openItem(S.archive[b.dataset.openArch]); });
   const autosave=async(msg)=>{ if(S.tasks[t.id]){ await store.put("tasks",{...S.tasks[t.id],checklist:t.checklist,comments:t.comments}); if(msg) await log(msg); } };
   dlgForm.querySelector("#clAdd").onclick=()=>{ const i=dlgForm.querySelector("#clNew"); if(!i.value.trim()) return; t.checklist.push({text:i.value.trim(),done:false}); i.value=""; renderSubs(); autosave(); };
   dlgForm.querySelector("#clList").addEventListener("change",e=>{ const d=e.target.dataset;
@@ -786,16 +843,23 @@ function openPhase(p){
 }
 
 function openArchive(a, preset){
-  const isNew=!a; a = a ? {...a} : {id:uid(),title:"",url:"",note:"",phase:"",task:"",by:me,at:new Date().toISOString(),...preset};
+  const isNew=!a; a = a ? {...a} : {id:uuid(),title:"",url:"",storage_path:"",kind:"link",note:"",phase:"",task:"",by:me,at:new Date().toISOString(),...preset};
+  const canUpload=!!store.upload;
   const taskOpts=Object.values(S.tasks).sort((x,y)=>x.title.localeCompare(y.title,"it")).map(t=>`<option value="${esc(t.id)}" ${t.id===a.task?"selected":""}>${esc(t.title)}</option>`).join("");
   showDlg(isNew?"Aggiungi all'archivio":"Modifica elemento",
-    `<div class="field"><label>Link (Google Drive, documento, cartella, immagine o sito)</label><input type="url" name="url" value="${esc(a.url)}" required placeholder="https://drive.google.com/…"></div>
+    `<div class="field"><label>Link (Google Drive, documento, cartella, immagine o sito)</label><input type="url" name="url" value="${esc(a.url)}" placeholder="https://drive.google.com/…" ${a.storage_path?"disabled":""}></div>
+    ${canUpload?`<div class="field"><label>Oppure carica un file (max 20 MB)</label>${a.storage_path?`<p style="margin:0">📎 ${esc(a.storage_path.split("/").pop())}</p>`:`<input type="file" name="file">`}</div>`:""}
     <div class="field"><label>Titolo</label><input type="text" name="title" value="${esc(a.title)}"></div>
     <div class="grid2"><div class="field"><label>Fase</label>${phaseSelect(a.phase)}</div><div class="field"><label>Task collegato</label><select name="task"><option value="">Nessuno</option>${taskOpts}</select></div></div>
     <div class="field"><label>Nota</label><textarea name="note">${esc(a.note)}</textarea></div>`,
     `${isNew?"":`<button type="button" class="btn danger" id="arDel">Elimina</button>`}<span class="grow"></span><button class="btn" value="close">Annulla</button><button class="btn primary" value="save">Salva</button>`,
-    async()=>{ const url=fval("url"); try{ new URL(url); }catch(e){ toast("Link non valido"); return false; }
-      Object.assign(a,{url,title:fval("title")||url,phase:fval("phase"),task:fval("task"),note:dlgForm.elements.note.value});
+    async()=>{
+      const f=dlgForm.elements.file?.files?.[0]; const url=fval("url");
+      if(f){ if(f.size>20*1024*1024){ toast("File oltre 20 MB: usa un link Drive"); return false; }
+        toast("Caricamento in corso…"); const path=await store.upload(f,"directory"); if(!path) return false;
+        a.storage_path=path; a.url=""; a.kind=/^image\//.test(f.type)?"image":"file"; if(!fval("title")) a.title=f.name; }
+      else if(!a.storage_path){ try{ new URL(url); }catch(e){ toast("Inserisci un link valido o carica un file"); return false; } a.url=url; a.kind=DB_KIND[archKind(url)]||"link"; }
+      Object.assign(a,{title:fval("title")||a.title||url,phase:fval("phase"),task:fval("task"),note:dlgForm.elements.note.value});
       await store.put("archive",a); await log(`${isNew?"ha archiviato":"ha modificato"} "${a.title}"`); });
   const d=dlgForm.querySelector("#arDel"); if(d) d.onclick=async()=>{ if(confirm("Eliminare dall'archivio?")){ await store.del("archive",a.id); await log(`ha rimosso "${a.title}" dall'archivio`); dlg.close(); } };
 }
@@ -823,8 +887,9 @@ function renderChecks(){
       <input type="checkbox" data-chk-done="${esc(c.id)}" ${c.done?"checked":""} aria-label="Completato">
       <div style="flex:1;min-width:0"><div class="t">${esc(c.title)}</div>${c.subtitle?`<div class="s">${esc(c.subtitle)}</div>`:""}
       <div class="meta">${c.task&&S.tasks[c.task]?`<span>Task: ${esc(S.tasks[c.task].title)}</span>`:""}${(c.links||[]).length?`<span>${c.links.length} link</span>`:""}${(c.images||[]).length?`<span>${c.images.length} immagini</span>`:""}${(c.comments||[]).length?`<span>${c.comments.length} commenti</span>`:""}</div></div>
-      ${img?`<img class="thumb" src="${esc(img)}" alt="">`:""}</div>`; }).join("")
+      ${img?imgTag(img,'class="thumb"'):""}</div>`; }).join("")
     : `<div class="empty" style="grid-column:1/-1">Nessun argomento. Aggiungine uno per tenere traccia di verifiche e decisioni.</div>`;
+  hydrateImages($("#checkGrid"));
 }
 $("#checkHideDone").addEventListener("change",renderChecks);
 $("#newCheck").onclick=()=>openCheck(null);
@@ -835,6 +900,7 @@ $("#checkGrid").addEventListener("click",async e=>{
 });
 $("#checkGrid").addEventListener("keydown",e=>{ const c=e.target.closest("[data-chk]"); if(c&&e.target===c&&(e.key==="Enter"||e.key===" ")){ e.preventDefault(); openCheck(S.checks[c.dataset.chk]); } });
 
+function resizeImageBlob(file){ return new Promise((res,rej)=>{ const u=URL.createObjectURL(file); const im=new Image(); im.onload=()=>{ const max=1600; const k=Math.min(1,max/Math.max(im.width,im.height)); const cv=document.createElement("canvas"); cv.width=Math.round(im.width*k); cv.height=Math.round(im.height*k); cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height); URL.revokeObjectURL(u); cv.toBlob(b=>b?res(b):rej(),"image/jpeg",.85); }; im.onerror=rej; im.src=u; }); }
 function resizeImage(file){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>{ const im=new Image(); im.onload=()=>{ const max=1400; const k=Math.min(1,max/Math.max(im.width,im.height)); const cv=document.createElement("canvas"); cv.width=Math.round(im.width*k); cv.height=Math.round(im.height*k); cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height); res(cv.toDataURL("image/jpeg",.8)); }; im.onerror=rej; im.src=r.result; }; r.onerror=rej; r.readAsDataURL(file); }); }
 
 function openCheck(c){
@@ -843,7 +909,8 @@ function openCheck(c){
   const persist=async(msg)=>{ if(S.checks[c.id]){ await store.put("checks",{...S.checks[c.id],links:c.links,images:c.images,comments:c.comments}); if(msg) await log(msg); } };
   const renderSubs=()=>{
     dlgForm.querySelector("#ckLinks").innerHTML = c.links.map((l,i)=>`<div class="cl-row"><span>${KIND_ICON[archKind(l.url)]}</span><a href="${esc(l.url)}" target="_blank" rel="noopener" style="flex:1;overflow-wrap:anywhere">${esc(l.title||l.url)}</a><button type="button" class="btn ghost sm" data-lk-del="${i}">Rimuovi</button></div>`).join("") || `<p style="color:var(--muted);margin:0 0 8px">Nessun link.</p>`;
-    dlgForm.querySelector("#ckImgs").innerHTML = c.images.map((src,i)=>`<figure><img src="${esc(src)}" alt="Immagine ${i+1}" data-zoom><button type="button" class="btn sm" data-im-del="${i}">Rimuovi</button></figure>`).join("");
+    dlgForm.querySelector("#ckImgs").innerHTML = c.images.map((src,i)=>`<figure>${imgTag(src,"data-zoom")}<button type="button" class="btn sm" data-im-del="${i}">Rimuovi</button></figure>`).join("");
+    hydrateImages(dlgForm.querySelector("#ckImgs"));
     dlgForm.querySelector("#ckCm").innerHTML = c.comments.length ? c.comments.map(x=>`<div class="comment"><div class="by">${esc(x.by)} · ${fmtDate(x.at)}</div><div>${linkify(x.text).replace(/\n/g,"<br>")}</div></div>`).join("") : `<p style="color:var(--muted);margin:0 0 8px">Nessun commento.</p>`;
   };
   showDlg(isNew?"Nuovo argomento":"Check",
@@ -859,7 +926,7 @@ function openCheck(c){
     <div class="sub"><h4>Link</h4><div id="ckLinks"></div><div class="inline"><input type="url" id="lkUrl" placeholder="https://…"><input type="text" id="lkTitle" placeholder="Titolo (facoltativo)"><button type="button" class="btn sm" id="lkAdd">Aggiungi</button></div></div>
     <div class="sub"><h4>Immagini</h4><div class="gallery" id="ckImgs"></div>
       <div class="inline"><label class="btn sm" for="imFile">Carica immagini</label><input type="file" id="imFile" accept="image/*" multiple class="hidden"><input type="url" id="imUrl" placeholder="oppure link a un'immagine"><button type="button" class="btn sm" id="imAdd">Aggiungi</button></div>
-      <p style="color:var(--muted);font-size:.82rem;margin:6px 0 0">Le immagini caricate vengono ridotte a 1400 px. Per file pesanti usa un link Drive.</p></div>
+      <p style="color:var(--muted);font-size:.82rem;margin:6px 0 0">Le immagini caricate vengono ridotte e salvate negli allegati del progetto.</p></div>
     <div class="sub"><h4>Commenti</h4><div id="ckCm"></div><textarea id="ckCmNew" placeholder="Scrivi un commento" style="min-height:60px"></textarea><div style="margin-top:6px"><button type="button" class="btn sm" id="ckCmAdd">Commenta</button></div></div>`,
     `${isNew?"":`<button type="button" class="btn danger" id="ckDel">Elimina</button><button type="button" class="btn" id="ckToTask">Crea attività</button>`}<span class="grow"></span><button class="btn" value="close">Annulla</button><button class="btn primary" value="save">Salva</button>`,
     async()=>{ if(!fval("title")){ toast("Il titolo è obbligatorio"); return false; }
@@ -869,9 +936,12 @@ function openCheck(c){
   const q=x=>dlgForm.querySelector(x);
   q("#lkAdd").onclick=()=>{ const u=q("#lkUrl").value.trim(); try{ new URL(u); }catch(e){ toast("Link non valido"); return; } c.links.push({url:u,title:q("#lkTitle").value.trim()}); q("#lkUrl").value=""; q("#lkTitle").value=""; renderSubs(); persist(); };
   q("#ckLinks").addEventListener("click",e=>{ const b=e.target.closest("[data-lk-del]"); if(b){ c.links.splice(+b.dataset.lkDel,1); renderSubs(); persist(); } });
-  q("#imFile").onchange=async e=>{ for(const f of e.target.files){ try{ c.images.push(await resizeImage(f)); }catch(err){ toast("Immagine non leggibile"); } } e.target.value=""; renderSubs(); persist(); };
+  q("#imFile").onchange=async e=>{ for(const f of e.target.files){ try{
+      if(store.upload){ toast("Caricamento in corso…"); const blob=await resizeImageBlob(f); const path=await store.upload(new File([blob],(f.name||"img").replace(/\.[^.]+$/,"")+".jpg",{type:"image/jpeg"}),"checks"); if(path) c.images.push("storage:"+path); }
+      else c.images.push(await resizeImage(f));
+    }catch(err){ toast("Immagine non leggibile"); } } e.target.value=""; renderSubs(); persist(); };
   q("#imAdd").onclick=()=>{ const u=q("#imUrl").value.trim(); try{ new URL(u); }catch(e){ toast("Link non valido"); return; } c.images.push(u); q("#imUrl").value=""; renderSubs(); persist(); };
-  q("#ckImgs").addEventListener("click",e=>{ const z=e.target.closest("[data-zoom]"); if(z){ z.classList.toggle("big"); return; } const b=e.target.closest("[data-im-del]"); if(b){ c.images.splice(+b.dataset.imDel,1); renderSubs(); persist(); } });
+  q("#ckImgs").addEventListener("click",e=>{ const z=e.target.closest("[data-zoom]"); if(z){ z.classList.toggle("big"); return; } const b=e.target.closest("[data-im-del]"); if(b){ const [rm]=c.images.splice(+b.dataset.imDel,1); if(isStorage(rm)&&supa) supa.storage.from(BUCKET).remove([rm.slice(8)]); renderSubs(); persist(); } });
   q("#ckCmAdd").onclick=async()=>{ const v=q("#ckCmNew").value.trim(); if(!v) return; c.comments.push({by:me,at:new Date().toISOString(),text:v}); q("#ckCmNew").value=""; renderSubs(); if(S.checks[c.id]) await persist(`ha commentato il check "${c.title}"`); else toast("Il commento sarà salvato con l'argomento"); };
   const del=q("#ckDel"); if(del) del.onclick=async()=>{ if(confirm("Eliminare l'argomento?")){ await store.del("checks",c.id); await log(`ha eliminato il check "${c.title}"`); dlg.close(); } };
   const tt=q("#ckToTask"); if(tt) tt.onclick=async()=>{ const t={id:uid(),title:c.title,desc:[c.subtitle,c.desc].filter(Boolean).join("\n\n"),status:"todo",phase:c.phase,step:"",roles:[...(c.roles||[])],assignee:"",due:"",checklist:[],comments:[],order:Date.now()};
