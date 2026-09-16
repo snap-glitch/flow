@@ -1,0 +1,882 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flow PM: dal prototipo alla pubblicazione</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+:root{
+  --bg:#FAFBFC;--surface:#FFFFFF;--ink:#18202E;--muted:#5B6576;--line:#E1E5EB;--rowalt:#F4F6F9;--col:#EEF1F5;
+  --accent:#4249FF;--accent-bg:#E9EAFF;--danger:#C2372F;
+  --design:#7446D0;--design-bg:#F1EBFC;--dev:#0C7F73;--dev-bg:#E3F4F1;--ai:#A8660F;--ai-bg:#FBF0DE;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#10141B;--surface:#161B24;--ink:#E7EAF0;--muted:#98A2B3;--line:#2A313D;--rowalt:#1B212B;--col:#131820;
+  --accent:#8A90FF;--accent-bg:#20234A;--danger:#FF7B72;
+  --design:#B999F5;--design-bg:#2A2140;--dev:#5FD1C2;--dev-bg:#15312E;--ai:#F0B45C;--ai-bg:#352813;}}
+:root[data-theme="dark"]{
+  --bg:#10141B;--surface:#161B24;--ink:#E7EAF0;--muted:#98A2B3;--line:#2A313D;--rowalt:#1B212B;--col:#131820;
+  --accent:#8A90FF;--accent-bg:#20234A;--danger:#FF7B72;
+  --design:#B999F5;--design-bg:#2A2140;--dev:#5FD1C2;--dev-bg:#15312E;--ai:#F0B45C;--ai-bg:#352813;}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:"Instrument Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:14.5px;line-height:1.5}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.hidden{display:none!important}
+.wrap{max-width:1280px;margin:0 auto;padding:24px 20px 64px}
+/* gate */
+#gate{min-height:100vh;display:grid;place-items:center;padding:24px}
+#gate form{width:100%;max-width:360px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:28px}
+#gate h1{margin:0 0 6px;font-size:1.4rem}
+#gate p{margin:0 0 18px;color:var(--muted)}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.field label{font-size:.85rem;color:var(--muted);font-weight:500}
+input[type=text],input[type=password],input[type=email],input[type=url],input[type=date],select,textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:5px;background:var(--bg)}
+textarea{min-height:80px;resize:vertical}
+.btn{padding:8px 14px;border-radius:5px;border:1px solid var(--line);background:var(--surface);font-weight:600}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+[data-theme] .btn.primary,.btn.primary{color:var(--bg)}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--muted)}
+.btn.ghost:hover{color:var(--ink);border-color:var(--line)}
+.btn.danger{color:var(--danger)}
+.btn.sm{padding:4px 9px;font-size:.85rem}
+.err{color:var(--danger);font-size:.88rem;min-height:1.2em;margin:4px 0 0}
+/* top */
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;margin-bottom:18px}
+.top h1{font-size:1.5rem;margin:0;letter-spacing:-.01em;flex:1 1 auto}
+.mode{font-size:.82rem;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
+.mode i{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block}
+.mode.live i{background:var(--dev)}
+nav.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:22px;overflow-x:auto}
+nav.tabs button{background:none;border:0;border-bottom:2px solid transparent;padding:10px 14px;font-weight:600;color:var(--muted);white-space:nowrap}
+nav.tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--accent)}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px}
+.toolbar .grow{flex:1}
+.toolbar select,.toolbar input{width:auto;min-width:150px}
+/* roles */
+.r{display:inline-block;font-size:.78rem;font-weight:600;padding:1px 7px;border-radius:4px;margin:1px 3px 1px 0;white-space:nowrap}
+.r.c0{color:var(--design);background:var(--design-bg)}
+.r.c1{color:var(--dev);background:var(--dev-bg)}
+.r.c2{color:var(--ai);background:var(--ai-bg)}
+.r.c3{color:var(--accent);background:var(--accent-bg)}
+/* glossary term */
+.term{background:none;border:0;padding:0;color:inherit;font-weight:inherit;text-decoration:underline dotted var(--accent);text-decoration-thickness:1.5px;text-underline-offset:3px;cursor:help}
+.term:hover{color:var(--accent)}
+#pop{position:fixed;z-index:60;max-width:320px;background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:12px 14px;box-shadow:0 10px 30px rgba(0,0,0,.18)}
+#pop h4{margin:0 0 4px;font-size:.95rem}
+#pop p{margin:0;color:var(--muted);font-size:.9rem}
+#pop a{font-size:.85rem}
+/* board */
+.board{display:grid;grid-template-columns:repeat(4,minmax(250px,1fr));gap:14px;overflow-x:auto;padding-bottom:8px}
+.column{background:var(--col);border-radius:8px;padding:10px;min-height:300px;display:flex;flex-direction:column;gap:8px}
+.column.over{outline:2px dashed var(--accent);outline-offset:-2px}
+.column h3{margin:2px 4px 4px;font-size:.92rem;display:flex;justify-content:space-between;color:var(--muted)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px 11px;cursor:grab;text-align:left;width:100%}
+.card:hover{border-color:var(--accent)}
+.card .t{font-weight:600;margin-bottom:5px}
+.card .meta{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;font-size:.8rem;color:var(--muted)}
+.card .ph{font-weight:600;color:var(--accent)}
+.card.dragging{opacity:.4}
+.add-card{border:1px dashed var(--line);background:none;border-radius:6px;padding:8px;color:var(--muted);font-weight:600}
+.add-card:hover{color:var(--ink);border-color:var(--accent)}
+/* flow tables */
+.phase{margin-bottom:40px}
+.phase-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 14px;margin-bottom:4px}
+.phase-head h2{font-size:1.3rem;margin:0}
+.phase-head .n{color:var(--accent);margin-right:4px}
+.phase > p{margin:0 0 12px;color:var(--muted);max-width:75ch}
+.progress{font-size:.82rem;color:var(--muted)}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--surface)}
+table{width:100%;border-collapse:collapse;min-width:900px}
+th,td{text-align:left;vertical-align:top;padding:10px 12px;border-bottom:1px solid var(--line)}
+th{font-weight:600;font-size:.82rem;color:var(--muted);background:var(--rowalt)}
+tbody tr:last-child td{border-bottom:0}
+td.num{color:var(--muted);width:34px;font-variant-numeric:tabular-nums}
+td.what{font-weight:600}
+td.acts{white-space:nowrap;width:1%}
+.status-pill{font-size:.78rem;font-weight:600;padding:1px 7px;border-radius:4px;background:var(--rowalt);color:var(--muted);white-space:nowrap}
+.status-pill.done{background:var(--dev-bg);color:var(--dev)}
+.status-pill.doing{background:var(--accent-bg);color:var(--accent)}
+.status-pill.review{background:var(--ai-bg);color:var(--ai)}
+/* lists */
+.list{display:grid;gap:10px}
+.item{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 14px;display:flex;gap:14px;align-items:flex-start}
+.item .body{flex:1;min-width:0}
+.item .t{font-weight:600;overflow-wrap:anywhere}
+.item .s{color:var(--muted);font-size:.85rem;overflow-wrap:anywhere}
+.item .kind{font-size:1.4rem;line-height:1;width:32px;text-align:center}
+.timeline .item{padding:9px 12px}
+.timeline .when{color:var(--muted);font-size:.8rem;white-space:nowrap}
+.empty{color:var(--muted);padding:24px;text-align:center;border:1px dashed var(--line);border-radius:6px}
+/* modal */
+dialog{border:1px solid var(--line);border-radius:10px;padding:0;background:var(--surface);color:var(--ink);width:min(720px,94vw);max-height:90vh}
+dialog::backdrop{background:rgba(10,14,20,.5)}
+.dlg-head{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--surface);z-index:1}
+.dlg-head h3{margin:0;font-size:1.05rem}
+.dlg-body{padding:16px 18px}
+.dlg-foot{display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;border-top:1px solid var(--line);position:sticky;bottom:0;background:var(--surface)}
+.dlg-foot .grow{flex:1}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+@media (max-width:600px){.grid2{grid-template-columns:1fr}}
+.checks{display:flex;flex-wrap:wrap;gap:6px 14px}
+.checks label{display:inline-flex;gap:5px;align-items:center}
+.sub{margin-top:18px}
+.sub h4{margin:0 0 8px;font-size:.92rem}
+.cl-row{display:flex;gap:8px;align-items:center;margin-bottom:5px}
+.cl-row input[type=text]{flex:1;padding:5px 8px}
+.comment{border-left:3px solid var(--line);padding:4px 10px;margin-bottom:8px}
+.comment .by{font-size:.8rem;color:var(--muted)}
+.inline{display:flex;gap:8px}
+.inline input{flex:1}
+.preview{width:100%;height:60vh;border:1px solid var(--line);border-radius:6px;background:var(--rowalt)}
+.preview-img{max-width:100%;border-radius:6px;display:block;margin:0 auto}
+.note-box{background:var(--rowalt);border-radius:6px;padding:10px 12px;font-size:.88rem;color:var(--muted)}
+pre.sql{background:var(--rowalt);padding:12px;border-radius:6px;overflow-x:auto;font-size:.82rem}
+.settings{display:grid;gap:18px;max-width:760px}
+.settings section{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px 18px}
+.settings h3{margin:0 0 8px;font-size:1.02rem}
+.settings p{margin:0 0 10px;color:var(--muted)}
+.roles-edit .cl-row input[type=text]{max-width:260px}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:6px;font-size:.9rem;z-index:80}
+@media (prefers-reduced-motion:no-preference){.toast{transition:opacity .2s}}
+.brand-logo{width:56px;height:56px;border-radius:12px;display:block;margin:0 0 16px}
+.brand{display:flex;align-items:center;gap:10px}
+.brand img{width:34px;height:34px;border-radius:8px}
+.icon-btn{width:36px;height:36px;display:inline-grid;place-items:center;border:1px solid var(--line);border-radius:6px;background:var(--surface);padding:0}
+.icon-btn:hover,.icon-btn[aria-pressed=true]{border-color:var(--accent);color:var(--accent)}
+.icon-btn svg{width:18px;height:18px}
+nav.tabs{align-items:flex-end}
+nav.tabs .primary-tab{font-size:1.02rem;padding:10px 18px}
+nav.tabs .sep{flex:1}
+nav.tabs .secondary-tab{font-size:.86rem;font-weight:500;padding:8px 10px}
+.check{margin-bottom:26px}
+.check-head{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
+.check-head h2{margin:0;font-size:1.1rem}
+.check-head .progress{flex:1}
+.check-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.chk{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px 12px;display:flex;gap:10px;align-items:flex-start;cursor:pointer;text-align:left}
+.chk:hover{border-color:var(--accent)}
+.chk input{margin-top:3px}
+.chk .t{font-weight:600}
+.chk.done .t{text-decoration:line-through;color:var(--muted)}
+.chk .s{color:var(--muted);font-size:.86rem}
+.chk .meta{font-size:.78rem;color:var(--muted);margin-top:4px;display:flex;gap:8px;flex-wrap:wrap}
+.chk .thumb{width:44px;height:44px;object-fit:cover;border-radius:4px;flex:none;margin-left:auto}
+.gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin-bottom:8px}
+.gallery figure{margin:0;position:relative}
+.gallery img{width:100%;height:100px;object-fit:cover;border-radius:5px;border:1px solid var(--line);cursor:zoom-in;display:block}
+.gallery img.big{position:fixed;inset:5vh 5vw;width:90vw;height:90vh;object-fit:contain;background:rgba(10,14,20,.9);z-index:90;cursor:zoom-out;border:0}
+.gallery figure button{position:absolute;top:4px;right:4px}
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <form id="gateForm" autocomplete="on">
+    <img class="brand-logo" src="data:image/png;base64,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" alt="Snaproof">
+    <h1>Snaproof Flow PM</h1>
+    <p id="gateHint">Seleziona il tuo utente e inserisci la password.</p>
+    <div class="field" id="userField"><label for="gUser">Utente</label><select id="gUser" required></select></div>
+    <div class="field hidden" id="emailField"><label for="gEmail">Email</label><input type="email" id="gEmail" autocomplete="username"></div>
+    <div class="field"><label for="gPw">Password</label><input type="password" id="gPw" autocomplete="current-password" required></div>
+    <button class="btn primary" type="submit" style="width:100%">Entra</button>
+    <p class="err" id="gateErr" role="alert"></p>
+  </form>
+</div>
+
+<div id="app" class="hidden">
+<div class="wrap">
+  <div class="top">
+    <button class="icon-btn" id="settingsBtn" aria-label="Impostazioni" title="Impostazioni" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+    <div class="brand"><img src="data:image/png;base64,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" alt="Snaproof"></div>
+    <h1>Dal prototipo alla pubblicazione</h1>
+    <span class="mode" id="mode"><i></i><span>Connessione…</span></span>
+    <span class="mode" id="whoBtn"></span>
+    <button class="btn ghost sm" id="logoutBtn">Esci</button>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button role="tab" class="primary-tab" data-tab="board" aria-selected="true">Board</button>
+    <button role="tab" class="primary-tab" data-tab="flow" aria-selected="false">Flow</button>
+    <span class="sep"></span>
+    <button role="tab" class="secondary-tab" data-tab="archive" aria-selected="false">Archivio</button>
+    <button role="tab" class="secondary-tab" data-tab="history" aria-selected="false">Storico</button>
+    <button role="tab" class="secondary-tab" data-tab="glossary" aria-selected="false">Glossario</button>
+  </nav>
+
+  <section id="tab-board">
+    <div class="check">
+      <div class="check-head"><h2>Check</h2><span class="progress" id="checkProg"></span>
+        <label class="mode"><input type="checkbox" id="checkHideDone"> Nascondi completati</label>
+        <button class="btn sm" id="newCheck">Nuovo argomento</button></div>
+      <div class="check-grid" id="checkGrid"></div>
+    </div>
+    <div class="toolbar">
+      <select id="fPhase" aria-label="Filtra per fase"></select>
+      <select id="fRole" aria-label="Filtra per ruolo"></select>
+      <input type="text" id="fText" placeholder="Cerca task" aria-label="Cerca task">
+      <span class="grow"></span>
+      <button class="btn primary" id="newTask">Nuovo task</button>
+    </div>
+    <div class="board" id="board"></div>
+  </section>
+
+  <section id="tab-flow" class="hidden">
+    <div class="toolbar"><span class="grow"></span><button class="btn" id="newPhase">Nuova fase</button></div>
+    <div id="flow"></div>
+  </section>
+
+  <section id="tab-archive" class="hidden">
+    <div class="toolbar">
+      <select id="aPhase" aria-label="Filtra archivio per fase"></select>
+      <input type="text" id="aText" placeholder="Cerca nell'archivio" aria-label="Cerca nell'archivio">
+      <span class="grow"></span>
+      <button class="btn primary" id="newArchive">Aggiungi link o file</button>
+    </div>
+    <div class="list" id="archive"></div>
+  </section>
+
+  <section id="tab-history" class="hidden">
+    <div class="toolbar"><input type="text" id="hText" placeholder="Cerca nello storico" aria-label="Cerca nello storico"></div>
+    <div class="list timeline" id="history"></div>
+  </section>
+
+  <section id="tab-glossary" class="hidden">
+    <div class="toolbar"><input type="text" id="gText" placeholder="Cerca termine" aria-label="Cerca termine"><span class="grow"></span><button class="btn primary" id="newTerm">Nuovo termine</button></div>
+    <div class="list" id="glossary"></div>
+  </section>
+
+  <section id="tab-settings" class="hidden">
+    <div class="settings">
+      <section class="roles-edit">
+        <h3>Ruoli</h3>
+        <p>I ruoli compaiono su task e step del flow.</p>
+        <div id="rolesList"></div>
+        <div class="inline" style="max-width:420px;margin-top:8px"><input type="text" id="newRoleName" placeholder="Nuovo ruolo"><button class="btn" id="addRole">Aggiungi</button></div>
+      </section>
+      <section>
+        <h3>Backup</h3>
+        <p>Esporta o reimporta tutti i dati in JSON.</p>
+        <div class="inline"><button class="btn" id="exportBtn">Esporta JSON</button><label class="btn" for="importFile">Importa JSON</label><input type="file" id="importFile" accept="application/json" class="hidden"></div>
+      </section>
+      <section>
+        <h3>Collegare Supabase</h3>
+        <p>Nel file HTML, compila <b>SUPABASE_URL</b> e <b>SUPABASE_ANON_KEY</b> in cima allo script. Con Supabase attivo, l'accesso usa gli utenti Supabase (email e password) al posto della chiave condivisa. Esegui questo SQL nel progetto:</p>
+<pre class="sql" id="sqlBox">create table if not exists pm_items (
+  id text primary key,
+  col text not null,
+  data jsonb not null,
+  updated_at timestamptz default now()
+);
+alter table pm_items enable row level security;
+create policy "team_rw" on pm_items
+  for all to authenticated using (true) with check (true);
+alter publication supabase_realtime add table pm_items;</pre>
+        <p>Poi crea gli utenti del team in Authentication → Users.</p>
+      </section>
+    </div>
+  </section>
+</div>
+</div>
+
+<div id="pop" class="hidden" role="dialog" aria-live="polite"></div>
+<dialog id="dlg"><form method="dialog" id="dlgForm"></form></dialog>
+<div id="toast" class="toast hidden"></div>
+
+<script>
+/* ============ CONFIG ============ */
+const SUPABASE_URL = "";      // es. https://xxxx.supabase.co
+const SUPABASE_ANON_KEY = ""; // chiave anon pubblica
+const USERS = ["Edoardo","Simone","Alex"];
+const PW_HASH = "d8893b3fc2803cc2596e90d05be81f0dd4b74b7388e408c381097716e00b225d"; // SHA-256 della chiave condivisa
+/* ================================= */
+
+const COLS = ["phases","steps","tasks","checks","archive","activity","glossary","roles"];
+const STATUSES = [["todo","Da fare"],["doing","In corso"],["review","In revisione"],["done","Fatto"]];
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+const S = {}; COLS.forEach(c => S[c] = {});
+let store = null, me = "", supa = null;
+
+function ls(k, v){ try{ if(v===undefined) return localStorage.getItem(k); if(v===null) localStorage.removeItem(k); else localStorage.setItem(k,v);}catch(e){ return null; } }
+function ss(k, v){ try{ if(v===undefined) return sessionStorage.getItem(k); if(v===null) sessionStorage.removeItem(k); else sessionStorage.setItem(k,v);}catch(e){ return null; } }
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.remove("hidden"); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.add("hidden"),2200); }
+
+/* ============ SEED ============ */
+function seed(){
+  const roles = [["design","Design"],["dev","Dev"],["ai","AI"]].map(([id,name],i)=>({id,name,color:i}));
+  const phases = [
+    ["base","Base comune","Sblocca tutti i canali. Nessun canale parte prima che contratto API e back-end siano definiti."],
+    ["web","Web app","Primo canale: il più rapido da rilasciare e testare con utenti reali."],
+    ["mcp","MCP per Claude e OpenAI","Costo marginale basso se il back-end è pronto. Espone il prodotto come strumento utilizzabile dagli assistenti AI."],
+    ["android","Android","Stessa codebase Expo, build e invio gestiti da EAS."],
+    ["ios","iOS","Nessun Mac richiesto: build in cloud con EAS. La review Apple è la più severa, va prevista con margine."]
+  ].map(([id,name,desc],i)=>({id,name,desc,order:i}));
+  const st = {
+    base:[["Flussi e wireframe","FigJam","Mappa dei flussi","Definire il perimetro del prodotto",["design"]],
+      ["UI e design system","Figma Design + Figma Make","Schermate e token","Fonte visiva condivisa",["design","ai"]],
+      ["Prototipo funzionante","Claude Code → Expo","Repo su GitHub","Validare prima dello sviluppo completo",["design","ai"]],
+      ["Contratto API","OpenAPI","File spec","Allineare front-end, back-end e MCP",["dev","design"]],
+      ["Back-end","Supabase","Database, auth, API","Logica e dati unici per tutti i canali",["dev"]],
+      ["Handoff","Figma Dev Mode + Storybook","Componenti ispezionabili","Consegna senza ambiguità",["design","dev"]]],
+    web:[["Sviluppo","Expo (target web)","Codice di produzione","Rilascio del primo canale",["dev","ai"]],
+      ["Test","Playwright","Test automatici","Evitare regressioni",["dev","ai"]],
+      ["Deploy","Vercel + dominio","URL pubblico","Messa online",["dev"]],
+      ["Monitoraggio","Sentry","Log degli errori","Correggere in fretta",["dev"]]],
+    mcp:[["Scelta dei tool","Spec OpenAPI","Lista di 5–15 azioni","Esporre solo ciò che serve all'AI",["design","ai"]],
+      ["Server","MCP SDK TypeScript, remoto su HTTP","Server MCP","Uso del prodotto da parte degli assistenti AI",["dev","ai"]],
+      ["Autenticazione","OAuth 2.1 (via Supabase)","Login sicuro","Requisito per i directory pubblici",["dev"]],
+      ["Test","MCP Inspector + Claude + ChatGPT","Report dei test","Verificare il comportamento reale",["dev","design"]],
+      ["Hosting","Cloudflare Workers o Vercel","Endpoint HTTPS","Server raggiungibile",["dev"]],
+      ["Pubblicazione","Directory Anthropic + OpenAI Apps","Listing pubblico","Distribuzione",["design"]]],
+    android:[["Adattamento nativo","Expo","Build testabile","Permessi, notifiche, UI mobile",["dev","ai"]],
+      ["Build","EAS Build","File .aab","Pacchetto per il Play Store",["dev"]],
+      ["Account","Google Play Console (25 $ una tantum), intestato all'azienda","Account sviluppatore","Pubblicare",["design"]],
+      ["Test chiuso","Play Console","Gruppo di tester","Obbligatorio per gli account personali",["design","dev"]],
+      ["Scheda store","Figma Design","Screenshot, icona, privacy policy","Superare la review",["design","ai"]],
+      ["Rilascio","EAS Submit","App pubblicata","Andare live",["dev"]]],
+    ios:[["Account","Apple Developer Program (99 $/anno), intestato all'azienda","Account sviluppatore","Pubblicare",["design"]],
+      ["Build","EAS Build","File .ipa","Pacchetto per l'App Store",["dev"]],
+      ["Beta","TestFlight","Gruppo di tester","Test reale su iPhone",["dev","design"]],
+      ["Scheda store","Figma Design","Screenshot, privacy e dati raccolti","Superare la review Apple",["design","ai"]],
+      ["Rilascio","EAS Submit → App Store Connect","App pubblicata","Andare live",["dev"]]]
+  };
+  const steps=[]; Object.entries(st).forEach(([ph,arr])=>arr.forEach(([what,tool,output,purpose,roles],i)=>steps.push({id:ph+"-"+(i+1),phase:ph,order:i,what,tool,output,purpose,roles,status:"todo"})));
+  const g = [
+    ["FigJam","Lavagna collaborativa di Figma per flussi, mappe e wireframe a bassa fedeltà."],
+    ["Figma Design","Editor di Figma per schermate ad alta fedeltà, componenti e design system."],
+    ["Figma Make","Funzione AI di Figma che genera prototipi funzionanti da un prompt o da un design."],
+    ["Dev Mode","Modalità di Figma per sviluppatori: misure, colori, token e snippet di codice ispezionabili."],
+    ["Storybook","Catalogo dei componenti UI scritti in codice, consultabili e testabili in isolamento."],
+    ["Claude Code","Agente di Anthropic che scrive e modifica codice direttamente nel progetto, da terminale o desktop."],
+    ["Expo","Framework basato su React Native: una codebase per web, Android e iOS."],
+    ["TypeScript","JavaScript con tipi statici. Riduce errori e rende il codice più leggibile per il team."],
+    ["GitHub","Piattaforma che ospita il repository del codice, con cronologia, revisioni e automazioni."],
+    ["Repo","Repository: la cartella del progetto versionata con Git, con tutta la cronologia delle modifiche."],
+    ["OpenAPI","Standard per descrivere le API in un file: endpoint, parametri, risposte. È il contratto tra front-end e back-end."],
+    ["Supabase","Back-end pronto all'uso basato su Postgres: database, autenticazione, storage e realtime."],
+    ["Playwright","Strumento per test automatici end-to-end che simulano un utente reale nel browser."],
+    ["Vercel","Piattaforma di hosting per web app con deploy automatico da GitHub."],
+    ["Sentry","Servizio che raccoglie errori e crash in produzione, con dettagli per correggerli."],
+    ["MCP","Model Context Protocol: standard aperto per collegare strumenti e dati a un assistente AI come Claude o ChatGPT."],
+    ["MCP SDK","Libreria ufficiale per costruire server MCP, disponibile in TypeScript e Python."],
+    ["MCP Inspector","Strumento di debug per provare un server MCP e vederne tool e risposte."],
+    ["OAuth 2.1","Standard di autorizzazione: l'utente concede accesso senza condividere la password."],
+    ["Cloudflare Workers","Hosting serverless distribuito globalmente, adatto a server MCP remoti."],
+    ["EAS Build","Servizio Expo che compila l'app Android e iOS in cloud, senza Mac né Android Studio."],
+    ["EAS Submit","Servizio Expo che invia la build agli store (Play Console e App Store Connect)."],
+    [".aab","Android App Bundle: formato del pacchetto richiesto dal Google Play Store."],
+    [".ipa","Formato del pacchetto dell'app iOS da caricare su App Store Connect."],
+    ["Play Console","Pannello Google per pubblicare e gestire app Android sul Play Store."],
+    ["TestFlight","Servizio Apple per distribuire versioni beta dell'app iOS ai tester."],
+    ["App Store Connect","Pannello Apple per gestire schede, build, review e rilasci delle app iOS."],
+    ["Apple Developer Program","Iscrizione a pagamento necessaria per pubblicare app sull'App Store."],
+    ["Endpoint","Indirizzo specifico di un'API a cui l'app invia richieste."],
+    ["HTTPS","Protocollo web cifrato. Obbligatorio per API e server MCP pubblici."],
+    ["Deploy","Pubblicazione di una versione del software in un ambiente raggiungibile dagli utenti."],
+    ["Design system","Insieme di componenti, regole e token che rende coerente l'interfaccia."],
+    ["Token","Nel design: variabili come colori, spaziature e font condivise tra Figma e codice."],
+    ["Wireframe","Schema essenziale di una schermata, senza grafica finale, per definire struttura e contenuti."],
+    ["Handoff","Passaggio del design allo sviluppo, con tutte le specifiche necessarie."],
+    ["Test chiuso","Fase di test su Google Play con un gruppo ristretto di tester prima della pubblicazione."],
+    ["Directory","Catalogo pubblico dove Anthropic e OpenAI elencano connettori e app per i loro assistenti."]
+  ].map(([term,def])=>({id:"g-"+term.toLowerCase().replace(/[^a-z0-9]+/g,"-"),term,def,link:""}));
+  return {roles,phases,steps,glossary:g};
+}
+
+/* ============ STORES ============ */
+function makeLocalStore(){
+  const KEY="flowpm:v1";
+  const read=()=>{ try{ return JSON.parse(ls(KEY)||"null"); }catch(e){ return null; } };
+  let data = read(); const empty=!data; if(!data){ data={}; COLS.forEach(c=>data[c]={}); }
+  const subs={};
+  const save=()=>ls(KEY,JSON.stringify(data));
+  window.addEventListener("storage",e=>{ if(e.key===KEY){ data=read()||data; COLS.forEach(c=>subs[c]&&subs[c](data[c]||{})); }});
+  return { name:"Locale (solo questo browser)", live:false, empty:async()=>empty,
+    subscribe(col,cb){ subs[col]=cb; cb(data[col]||{}); },
+    async put(col,obj){ (data[col]=data[col]||{})[obj.id]=obj; save(); subs[col]&&subs[col](data[col]); },
+    async del(col,id){ delete data[col][id]; save(); subs[col]&&subs[col](data[col]); } };
+}
+function makeClaudeStore(db){
+  return { name:"Sincronizzato (Claude)", live:true,
+    empty:async()=>{ const d=await db.doc("meta/seed").get(); return !d.exists; },
+    subscribe(col,cb){ db.collection(col).onSnapshot(snap=>{ const o={}; snap.docs.forEach(d=>{ o[d.id]={...d.data(),id:d.id}; }); cb(o); }, e=>toast("Errore sync: "+e.code)); },
+    async put(col,obj){ await db.doc(col+"/"+obj.id).set(obj); },
+    async del(col,id){ await db.doc(col+"/"+id).delete(); },
+    async markSeeded(){ await db.doc("meta/seed").set({at:new Date().toISOString()}); } };
+}
+function makeSupaStore(client){
+  const cache={}; COLS.forEach(c=>cache[c]={}); const subs={};
+  const emit=c=>subs[c]&&subs[c](cache[c]);
+  return { name:"Supabase", live:true,
+    async init(){
+      const {data,error}=await client.from("pm_items").select("id,col,data"); if(error) throw error;
+      data.forEach(r=>{ if(cache[r.col]) cache[r.col][r.data.id]=r.data; });
+      client.channel("pm").on("postgres_changes",{event:"*",schema:"public",table:"pm_items"},p=>{
+        if(p.eventType==="DELETE"){ const [c,...rest]=String(p.old.id).split(":"); if(cache[c]){ delete cache[c][rest.join(":")]; emit(c);} }
+        else { const r=p.new; if(cache[r.col]){ cache[r.col][r.data.id]=r.data; emit(r.col);} }
+      }).subscribe();
+    },
+    empty:async()=>COLS.every(c=>!Object.keys(cache[c]).length),
+    subscribe(col,cb){ subs[col]=cb; cb(cache[col]); },
+    async put(col,obj){ cache[col][obj.id]=obj; emit(col); const {error}=await client.from("pm_items").upsert({id:col+":"+obj.id,col,data:obj,updated_at:new Date().toISOString()}); if(error) toast("Errore Supabase: "+error.message); },
+    async del(col,id){ delete cache[col][id]; emit(col); const {error}=await client.from("pm_items").delete().eq("id",col+":"+id); if(error) toast("Errore Supabase: "+error.message); } };
+}
+
+/* ============ AUTH ============ */
+async function sha256(t){ const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join(""); }
+const useSupa = !!(SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase);
+if(useSupa){ supa=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY); $("#emailField").classList.remove("hidden"); $("#gateHint").textContent="Accedi con il tuo utente Supabase."; }
+$("#gUser").innerHTML=USERS.map(u=>`<option>${u}</option>`).join("");
+if(ls("flowpm:name")&&USERS.includes(ls("flowpm:name"))) $("#gUser").value=ls("flowpm:name");
+if(useSupa) $("#userField").classList.add("hidden");
+
+$("#gateForm").addEventListener("submit", async e=>{
+  e.preventDefault(); $("#gateErr").textContent="";
+  const pw=$("#gPw").value; const nm=useSupa?$("#gEmail").value.trim().split("@")[0]:$("#gUser").value;
+  if(useSupa){
+    const {error}=await supa.auth.signInWithPassword({email:$("#gEmail").value.trim(),password:pw});
+    if(error){ $("#gateErr").textContent="Accesso non riuscito: "+error.message; return; }
+  } else {
+    if(await sha256(pw)!==PW_HASH){ $("#gateErr").textContent="Chiave di accesso errata."; return; }
+    ss("flowpm:auth",nm);
+  }
+  me=nm; ls("flowpm:name",nm);
+  start();
+});
+$("#logoutBtn").onclick=async()=>{ ss("flowpm:auth",null); if(supa) await supa.auth.signOut(); location.reload(); };
+$("#settingsBtn").onclick=()=>{ const on=$("#tab-settings").classList.contains("hidden");
+  document.querySelectorAll("[id^=tab-]").forEach(x=>x.classList.toggle("hidden", on? x.id!=="tab-settings" : x.id!=="tab-board"));
+  document.querySelectorAll("nav.tabs button").forEach(x=>x.setAttribute("aria-selected", !on && x.dataset.tab==="board"));
+  $("#settingsBtn").setAttribute("aria-pressed",on); };
+
+(async()=>{
+  if(useSupa){ const {data}=await supa.auth.getSession(); if(data.session){ me=(data.session.user.email||"utente").split("@")[0]; start(); } }
+  else { const u=ss("flowpm:auth"); if(u&&USERS.includes(u)){ me=u; start(); } }
+})();
+
+let started=false;
+async function start(){
+  if(started) return; started=true;
+  $("#gate").classList.add("hidden"); $("#app").classList.remove("hidden"); $("#whoBtn").textContent=me;
+  try{
+    if(useSupa){ store=makeSupaStore(supa); await store.init(); }
+    else if(window.claude && window.claude.use){ const db=await window.claude.use("db"); store = db ? makeClaudeStore(db) : makeLocalStore(); }
+    else store=makeLocalStore();
+  }catch(err){ toast("Supabase non raggiungibile, uso archivio locale"); store=makeLocalStore(); }
+  const m=$("#mode"); m.querySelector("span").textContent=store.name; m.classList.toggle("live",store.live);
+  if(await store.empty()){
+    const s=seed();
+    for(const c of ["roles","phases","steps","glossary"]) for(const o of s[c]) await store.put(c,o);
+    if(store.markSeeded) await store.markSeeded();
+    await log("ha inizializzato il progetto");
+  }
+  COLS.forEach(c=>store.subscribe(c,o=>{ S[c]=o||{}; renderAll(); }));
+}
+
+/* ============ HELPERS ============ */
+const arr = (c,key="order") => Object.values(S[c]).sort((a,b)=>(a[key]??0)-(b[key]??0));
+const roleById = id => S.roles[id];
+const roleTags = ids => (ids||[]).map(id=>{ const r=roleById(id); return r?`<span class="r c${r.color%4}">${esc(r.name)}</span>`:""; }).join("");
+const phaseName = id => S.phases[id]?.name || "Senza fase";
+async function log(text, ref){ await store.put("activity",{id:uid(),at:new Date().toISOString(),by:me,text,ref:ref||""}); }
+function fmtDate(iso){ try{ return new Date(iso).toLocaleString("it-IT",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}); }catch(e){ return iso; } }
+
+let termRe=null, termMap={};
+function buildTerms(){
+  const g=Object.values(S.glossary).filter(x=>x.term);
+  termMap={}; g.forEach(x=>termMap[x.term.toLowerCase()]=x);
+  const keys=g.map(x=>x.term).sort((a,b)=>b.length-a.length).map(t=>t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"));
+  termRe = keys.length ? new RegExp("(?<![\\p{L}\\p{N}])("+keys.join("|")+")(?![\\p{L}\\p{N}])","giu") : null;
+}
+function linkify(text){
+  const s=esc(text); if(!termRe) return s;
+  return s.replace(termRe, m=>{ const t=termMap[m.toLowerCase()]; return t?`<button type="button" class="term" data-term="${esc(t.id)}">${m}</button>`:m; });
+}
+
+/* ============ POPOVER ============ */
+document.addEventListener("click",e=>{
+  const b=e.target.closest(".term");
+  const pop=$("#pop");
+  if(b){ e.preventDefault(); e.stopPropagation();
+    const t=S.glossary[b.dataset.term]; if(!t) return;
+    pop.innerHTML=`<h4>${esc(t.term)}</h4><p>${esc(t.def)}</p>${t.link?`<p style="margin-top:6px"><a href="${esc(t.link)}" target="_blank" rel="noopener">Approfondisci</a></p>`:""}`;
+    pop.classList.remove("hidden");
+    const r=b.getBoundingClientRect(); const w=Math.min(320,innerWidth-16);
+    pop.style.left=Math.max(8,Math.min(r.left,innerWidth-w-8))+"px";
+    const below=r.bottom+8; pop.style.top=(below+pop.offsetHeight>innerHeight? Math.max(8,r.top-pop.offsetHeight-8):below)+"px";
+    return;
+  }
+  if(!e.target.closest("#pop")) pop.classList.add("hidden");
+},true);
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") $("#pop").classList.add("hidden"); });
+window.addEventListener("scroll",()=>$("#pop").classList.add("hidden"),true);
+
+/* ============ TABS ============ */
+document.querySelectorAll("nav.tabs button").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll("nav.tabs button").forEach(x=>x.setAttribute("aria-selected",x===b));
+  document.querySelectorAll("[id^=tab-]").forEach(s=>s.classList.toggle("hidden",s.id!=="tab-"+b.dataset.tab));
+  $("#settingsBtn").setAttribute("aria-pressed","false");
+});
+
+/* ============ RENDER ============ */
+function renderAll(){ buildTerms(); renderFilters(); renderChecks(); renderBoard(); renderFlow(); renderArchive(); renderHistory(); renderGlossary(); renderRoles(); }
+
+function renderFilters(){
+  const ph=arr("phases").map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
+  const ro=arr("roles","name").map(r=>`<option value="${esc(r.id)}">${esc(r.name)}</option>`).join("");
+  [["#fPhase","Tutte le fasi",ph],["#aPhase","Tutte le fasi",ph],["#fRole","Tutti i ruoli",ro]].forEach(([s,l,o])=>{ const el=$(s); const v=el.value; el.innerHTML=`<option value="">${l}</option>`+o; el.value=v; });
+}
+["#fPhase","#fRole","#fText"].forEach(s=>$(s).addEventListener("input",renderBoard));
+["#aPhase","#aText"].forEach(s=>$(s).addEventListener("input",renderArchive));
+$("#hText").addEventListener("input",renderHistory);
+$("#gText").addEventListener("input",renderGlossary);
+
+function renderBoard(){
+  const fp=$("#fPhase").value, fr=$("#fRole").value, ft=$("#fText").value.toLowerCase();
+  const tasks=Object.values(S.tasks).filter(t=>(!fp||t.phase===fp)&&(!fr||(t.roles||[]).includes(fr))&&(!ft||(t.title+" "+(t.desc||"")).toLowerCase().includes(ft)));
+  $("#board").innerHTML=STATUSES.map(([k,l])=>{
+    const list=tasks.filter(t=>(t.status||"todo")===k).sort((a,b)=>(a.order??0)-(b.order??0));
+    return `<div class="column" data-status="${k}"><h3><span>${l}</span><span>${list.length}</span></h3>
+      ${list.map(t=>{ const cl=t.checklist||[]; const done=cl.filter(x=>x.done).length;
+        return `<div class="card" role="button" tabindex="0" draggable="true" data-id="${esc(t.id)}">
+          <div class="t">${esc(t.title)}</div>
+          <div class="meta"><span class="ph">${esc(phaseName(t.phase))}</span>${roleTags(t.roles)}
+          ${t.due?`<span>Scadenza ${esc(t.due)}</span>`:""}${cl.length?`<span>${done}/${cl.length}</span>`:""}
+          ${(t.comments||[]).length?`<span>${t.comments.length} commenti</span>`:""}${t.assignee?`<span>${esc(t.assignee)}</span>`:""}</div>
+        </div>`; }).join("")}
+      <button type="button" class="add-card" data-add="${k}">Aggiungi task</button></div>`;
+  }).join("");
+}
+$("#board").addEventListener("keydown",e=>{ const c=e.target.closest(".card"); if(c&&(e.key==="Enter"||e.key===" ")){ e.preventDefault(); openTask(S.tasks[c.dataset.id]); } });
+$("#board").addEventListener("click",e=>{
+  const c=e.target.closest(".card"); if(c) return openTask(S.tasks[c.dataset.id]);
+  const a=e.target.closest("[data-add]"); if(a) openTask(null,{status:a.dataset.add});
+});
+let dragId=null;
+$("#board").addEventListener("dragstart",e=>{ const c=e.target.closest(".card"); if(!c) return; dragId=c.dataset.id; c.classList.add("dragging"); e.dataTransfer.effectAllowed="move"; });
+$("#board").addEventListener("dragend",e=>{ e.target.closest(".card")?.classList.remove("dragging"); document.querySelectorAll(".column").forEach(x=>x.classList.remove("over")); });
+$("#board").addEventListener("dragover",e=>{ const col=e.target.closest(".column"); if(!col) return; e.preventDefault(); document.querySelectorAll(".column").forEach(x=>x.classList.toggle("over",x===col)); });
+$("#board").addEventListener("drop",async e=>{
+  const col=e.target.closest(".column"); if(!col||!dragId) return; e.preventDefault();
+  const t=S.tasks[dragId]; const ns=col.dataset.status; dragId=null;
+  if(t && t.status!==ns){ await store.put("tasks",{...t,status:ns,order:Date.now()}); await syncStep({...t,status:ns}); await log(`ha spostato "${t.title}" in ${STATUSES.find(s=>s[0]===ns)[1]}`); }
+});
+
+function stepStatus(step){
+  const linked=Object.values(S.tasks).filter(t=>t.step===step.id);
+  if(!linked.length) return step.status||"todo";
+  if(linked.every(t=>t.status==="done")) return "done";
+  if(linked.some(t=>t.status==="review")) return "review";
+  if(linked.some(t=>t.status!=="todo")) return "doing";
+  return "todo";
+}
+async function syncStep(){ /* stato step derivato dai task collegati: calcolato in render */ }
+
+function renderFlow(){
+  const phases=arr("phases");
+  $("#flow").innerHTML = phases.map((p,i)=>{
+    const steps=Object.values(S.steps).filter(s=>s.phase===p.id).sort((a,b)=>a.order-b.order);
+    const done=steps.filter(s=>stepStatus(s)==="done").length;
+    return `<div class="phase" id="ph-${esc(p.id)}">
+      <div class="phase-head"><h2><span class="n">${i+1}</span>${esc(p.name)}</h2><span class="progress">${done}/${steps.length} completati</span>
+      <span class="grow" style="flex:1"></span>
+      <button class="btn ghost sm" data-ph-up="${esc(p.id)}" aria-label="Sposta su">Su</button>
+      <button class="btn ghost sm" data-ph-edit="${esc(p.id)}">Modifica fase</button>
+      <button class="btn sm" data-step-add="${esc(p.id)}">Aggiungi step</button></div>
+      <p>${linkify(p.desc||"")}</p>
+      <div class="tbl"><table><thead><tr><th>#</th><th>Cosa</th><th>Strumento</th><th>Output</th><th>A cosa serve</th><th>Chi</th><th>Stato</th><th></th></tr></thead><tbody>
+      ${steps.length?steps.map((s,j)=>{ const stt=stepStatus(s); const lab=STATUSES.find(x=>x[0]===stt)[1];
+        return `<tr><td class="num">${j+1}</td><td class="what">${linkify(s.what)}</td><td>${linkify(s.tool)}</td><td>${linkify(s.output)}</td><td>${linkify(s.purpose)}</td><td>${roleTags(s.roles)}</td>
+        <td><span class="status-pill ${stt}">${lab}</span></td>
+        <td class="acts"><button class="btn ghost sm" data-step-task="${esc(s.id)}">Crea task</button><button class="btn ghost sm" data-step-edit="${esc(s.id)}">Modifica</button></td></tr>`; }).join("")
+      :`<tr><td colspan="8" class="empty">Nessuno step. Aggiungine uno.</td></tr>`}
+      </tbody></table></div></div>`;
+  }).join("") || `<div class="empty">Nessuna fase.</div>`;
+}
+$("#flow").addEventListener("click",async e=>{
+  const g=(a)=>e.target.closest(`[${a}]`)?.getAttribute(a);
+  let id;
+  if(id=g("data-step-edit")) return openStep(S.steps[id]);
+  if(id=g("data-step-add")) return openStep(null,id);
+  if(id=g("data-ph-edit")) return openPhase(S.phases[id]);
+  if(id=g("data-step-task")){ const s=S.steps[id]; return openTask(null,{title:s.what,phase:s.phase,step:s.id,roles:[...(s.roles||[])],desc:`Strumento: ${s.tool}\nOutput: ${s.output}\nScopo: ${s.purpose}`}); }
+  if(id=g("data-ph-up")){ const ps=arr("phases"); const i=ps.findIndex(p=>p.id===id); if(i>0){ const a=ps[i],b=ps[i-1]; await store.put("phases",{...a,order:b.order}); await store.put("phases",{...b,order:a.order}); } }
+});
+$("#newPhase").onclick=()=>openPhase(null);
+
+/* ============ ARCHIVE ============ */
+function driveInfo(url){
+  try{ const u=new URL(url);
+    if(!/(^|\.)google\.com$/.test(u.hostname)) return null;
+    let m;
+    if(m=u.pathname.match(/\/drive\/(?:u\/\d+\/)?folders\/([^/?]+)/)) return {kind:"folder",id:m[1],embed:`https://drive.google.com/embeddedfolderview?id=${m[1]}#grid`};
+    if(m=u.pathname.match(/\/file\/d\/([^/]+)/)) return {kind:"file",id:m[1],embed:`https://drive.google.com/file/d/${m[1]}/preview`};
+    if(m=u.pathname.match(/\/(document|spreadsheets|presentation|forms)\/d\/([^/]+)/)) return {kind:m[1],id:m[2],embed:`https://docs.google.com/${m[1]}/d/${m[2]}/preview`};
+    if(u.searchParams.get("id")) return {kind:"file",id:u.searchParams.get("id"),embed:`https://drive.google.com/file/d/${u.searchParams.get("id")}/preview`};
+  }catch(e){} return null;
+}
+const KIND_ICON={folder:"📁",file:"📄",document:"📝",spreadsheets:"📊",presentation:"📽️",forms:"🗳️",image:"🖼️",link:"🔗"};
+function archKind(url){ const d=driveInfo(url); if(d) return d.kind; if(/\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(url)) return "image"; return "link"; }
+function renderArchive(){
+  const fp=$("#aPhase").value, ft=$("#aText").value.toLowerCase();
+  const items=Object.values(S.archive).filter(a=>(!fp||a.phase===fp)&&(!ft||(a.title+" "+a.note+" "+a.url).toLowerCase().includes(ft))).sort((a,b)=>(b.at||"").localeCompare(a.at||""));
+  $("#archive").innerHTML = items.length ? items.map(a=>{ const k=archKind(a.url);
+    return `<div class="item"><div class="kind" aria-hidden="true">${KIND_ICON[k]}</div><div class="body">
+      <div class="t">${esc(a.title||a.url)}</div>
+      <div class="s">${esc(phaseName(a.phase))}${a.task&&S.tasks[a.task]?" · Task: "+esc(S.tasks[a.task].title):""} · ${esc(a.by||"")} · ${fmtDate(a.at)}</div>
+      ${a.note?`<div style="margin-top:4px">${linkify(a.note)}</div>`:""}</div>
+      <div class="inline"><button class="btn sm" data-prev="${esc(a.id)}">Anteprima</button><a class="btn sm" href="${esc(a.url)}" target="_blank" rel="noopener">Apri</a><button class="btn ghost sm" data-aedit="${esc(a.id)}">Modifica</button></div></div>`;
+  }).join("") : `<div class="empty">Archivio vuoto. Aggiungi link a file e cartelle di Google Drive, documenti o risorse.</div>`;
+}
+$("#archive").addEventListener("click",e=>{
+  const p=e.target.closest("[data-prev]"); if(p) return openPreview(S.archive[p.dataset.prev]);
+  const m=e.target.closest("[data-aedit]"); if(m) return openArchive(S.archive[m.dataset.aedit]);
+});
+$("#newArchive").onclick=()=>openArchive(null);
+
+function openPreview(a){
+  const d=driveInfo(a.url); const k=archKind(a.url);
+  let body;
+  if(d) body=`<iframe class="preview" src="${esc(d.embed)}" allow="autoplay" referrerpolicy="no-referrer"></iframe>
+    <p class="note-box" style="margin-top:10px">Se l'anteprima non compare: il file deve essere condiviso almeno con chi ha il link, oppure devi essere loggato con un account che ha accesso. Nella versione ospitata su claude.ai i frame esterni possono essere bloccati: su GitHub Pages l'anteprima funziona.</p>`;
+  else if(k==="image") body=`<img class="preview-img" src="${esc(a.url)}" alt="${esc(a.title)}">`;
+  else body=`<iframe class="preview" src="${esc(a.url)}" referrerpolicy="no-referrer"></iframe><p class="note-box" style="margin-top:10px">Molti siti bloccano l'incorporamento. Usa "Apri" se l'anteprima resta vuota.</p>`;
+  showDlg(esc(a.title||"Anteprima"), body, `<span class="grow"></span><a class="btn" href="${esc(a.url)}" target="_blank" rel="noopener">Apri in una nuova scheda</a><button class="btn primary" value="close">Chiudi</button>`, null, true);
+}
+
+/* ============ HISTORY / GLOSSARY / ROLES ============ */
+function renderHistory(){
+  const ft=$("#hText").value.toLowerCase();
+  const items=Object.values(S.activity).filter(a=>!ft||(a.by+" "+a.text).toLowerCase().includes(ft)).sort((a,b)=>b.at.localeCompare(a.at)).slice(0,500);
+  $("#history").innerHTML = items.length ? items.map(a=>`<div class="item"><div class="body"><b>${esc(a.by)}</b> ${esc(a.text)}</div><div class="when">${fmtDate(a.at)}</div></div>`).join("") : `<div class="empty">Nessuna attività registrata.</div>`;
+}
+function renderGlossary(){
+  const ft=$("#gText").value.toLowerCase();
+  const items=Object.values(S.glossary).filter(g=>!ft||(g.term+" "+g.def).toLowerCase().includes(ft)).sort((a,b)=>a.term.localeCompare(b.term,"it"));
+  $("#glossary").innerHTML = items.map(g=>`<div class="item"><div class="body"><div class="t">${esc(g.term)}</div><div class="s">${esc(g.def)}</div></div><button class="btn ghost sm" data-gedit="${esc(g.id)}">Modifica</button></div>`).join("") || `<div class="empty">Nessun termine.</div>`;
+}
+$("#glossary").addEventListener("click",e=>{ const b=e.target.closest("[data-gedit]"); if(b) openTerm(S.glossary[b.dataset.gedit]); });
+$("#newTerm").onclick=()=>openTerm(null);
+
+function renderRoles(){
+  $("#rolesList").innerHTML = arr("roles","name").map(r=>`<div class="cl-row"><span class="r c${r.color%4}">${esc(r.name)}</span><input type="text" value="${esc(r.name)}" data-rname="${esc(r.id)}" aria-label="Nome ruolo"><button class="btn ghost sm danger" data-rdel="${esc(r.id)}">Elimina</button></div>`).join("");
+}
+$("#rolesList").addEventListener("change",async e=>{ const i=e.target.closest("[data-rname]"); if(!i) return; const r=S.roles[i.dataset.rname]; const v=i.value.trim(); if(v&&v!==r.name){ await store.put("roles",{...r,name:v}); await log(`ha rinominato il ruolo "${r.name}" in "${v}"`); } });
+$("#rolesList").addEventListener("click",async e=>{ const b=e.target.closest("[data-rdel]"); if(!b) return; const r=S.roles[b.dataset.rdel]; if(confirm(`Eliminare il ruolo "${r.name}"?`)){ await store.del("roles",r.id); await log(`ha eliminato il ruolo "${r.name}"`); } });
+$("#addRole").onclick=async()=>{ const v=$("#newRoleName").value.trim(); if(!v) return; await store.put("roles",{id:uid(),name:v,color:Object.keys(S.roles).length}); $("#newRoleName").value=""; await log(`ha aggiunto il ruolo "${v}"`); };
+
+$("#exportBtn").onclick=()=>{
+  const blob=new Blob([JSON.stringify(S,null,2)],{type:"application/json"}); const name=`flow-pm-${new Date().toISOString().slice(0,10)}.json`;
+  if(window.claude && window.claude.use){ window.claude.use("downloads").then(d=>{ if(d) d.save({filename:name,data:blob}).catch(()=>{}); else fallback(); }); } else fallback();
+  function fallback(){ const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; a.click(); }
+};
+$("#importFile").onchange=async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  try{ const d=JSON.parse(await f.text()); if(!confirm("Importare i dati? Gli elementi con lo stesso ID verranno sovrascritti.")) return;
+    for(const c of COLS) for(const o of Object.values(d[c]||{})) await store.put(c,o);
+    await log("ha importato un backup JSON"); toast("Import completato");
+  }catch(err){ toast("File non valido"); }
+  e.target.value="";
+};
+
+/* ============ DIALOGS ============ */
+const dlg=$("#dlg"), dlgForm=$("#dlgForm");
+let onSave=null;
+function showDlg(title, body, foot, save, wide){
+  dlg.style.width = wide? "min(1000px,96vw)" : "";
+  dlgForm.innerHTML=`<div class="dlg-head"><h3>${title}</h3><button class="btn ghost sm" value="close" aria-label="Chiudi">Chiudi</button></div><div class="dlg-body">${body}</div><div class="dlg-foot">${foot}</div>`;
+  onSave=save; dlg.showModal();
+}
+dlgForm.addEventListener("submit",async e=>{
+  const v=e.submitter?.value;
+  if(v==="save"&&onSave){ e.preventDefault(); const ok=await onSave(); if(ok!==false) dlg.close(); }
+});
+const roleChecks=(sel)=>`<div class="checks">${arr("roles","name").map(r=>`<label><input type="checkbox" name="roles" value="${esc(r.id)}" ${(sel||[]).includes(r.id)?"checked":""}> ${esc(r.name)}</label>`).join("")}</div>`;
+const phaseSelect=(v)=>`<select name="phase"><option value="">Senza fase</option>${arr("phases").map(p=>`<option value="${esc(p.id)}" ${p.id===v?"selected":""}>${esc(p.name)}</option>`).join("")}</select>`;
+const fval=n=>dlgForm.elements[n]?.value?.trim()??"";
+const froles=()=>[...dlgForm.querySelectorAll("input[name=roles]:checked")].map(x=>x.value);
+
+function openTask(t, preset){
+  const isNew=!t; t = t ? JSON.parse(JSON.stringify(t)) : {id:uid(),title:"",desc:"",status:"todo",phase:"",step:"",roles:[],assignee:"",due:"",checklist:[],comments:[],order:Date.now(),...preset};
+  const stepOpts = Object.values(S.steps).sort((a,b)=>(S.phases[a.phase]?.order??0)-(S.phases[b.phase]?.order??0)||a.order-b.order).map(s=>`<option value="${esc(s.id)}" ${s.id===t.step?"selected":""}>${esc(phaseName(s.phase))}: ${esc(s.what)}</option>`).join("");
+  const renderSubs=()=>{
+    dlgForm.querySelector("#clList").innerHTML = t.checklist.map((c,i)=>`<div class="cl-row"><input type="checkbox" data-cl-done="${i}" ${c.done?"checked":""} aria-label="Completato"><input type="text" data-cl-text="${i}" value="${esc(c.text)}"><button type="button" class="btn ghost sm" data-cl-del="${i}">Rimuovi</button></div>`).join("");
+    dlgForm.querySelector("#cmList").innerHTML = t.comments.length ? t.comments.map(c=>`<div class="comment"><div class="by">${esc(c.by)} · ${fmtDate(c.at)}</div><div>${linkify(c.text).replace(/\n/g,"<br>")}</div></div>`).join("") : `<p class="s" style="color:var(--muted);margin:0 0 8px">Nessun commento.</p>`;
+    const cks=Object.values(S.checks).filter(c=>c.task===t.id);
+    dlgForm.querySelector("#tkChecks").innerHTML = cks.length ? cks.map(c=>`<div class="cl-row"><span>${c.done?"✅":"⬜"}</span><span style="flex:1">${esc(c.title)}</span></div>`).join("") : `<p style="color:var(--muted);margin:0 0 8px">Nessun check collegato.</p>`;
+    const links=Object.values(S.archive).filter(a=>a.task===t.id);
+    dlgForm.querySelector("#tkArch").innerHTML = links.length ? links.map(a=>`<div class="cl-row"><span>${KIND_ICON[archKind(a.url)]}</span><a href="${esc(a.url)}" target="_blank" rel="noopener" style="flex:1;overflow-wrap:anywhere">${esc(a.title||a.url)}</a></div>`).join("") : `<p style="color:var(--muted);margin:0 0 8px">Nessun allegato.</p>`;
+  };
+  showDlg(isNew?"Nuovo task":"Task",
+    `<div class="field"><label>Titolo</label><input type="text" name="title" value="${esc(t.title)}" required></div>
+    <div class="grid2">
+      <div class="field"><label>Stato</label><select name="status">${STATUSES.map(([k,l])=>`<option value="${k}" ${k===t.status?"selected":""}>${l}</option>`).join("")}</select></div>
+      <div class="field"><label>Fase</label>${phaseSelect(t.phase)}</div>
+      <div class="field"><label>Step del flow</label><select name="step"><option value="">Nessuno</option>${stepOpts}</select></div>
+      <div class="field"><label>Assegnato a</label><input type="text" name="assignee" value="${esc(t.assignee)}"></div>
+      <div class="field"><label>Scadenza</label><input type="date" name="due" value="${esc(t.due)}"></div>
+    </div>
+    <div class="field"><label>Ruoli</label>${roleChecks(t.roles)}</div>
+    <div class="field"><label>Descrizione</label><textarea name="desc">${esc(t.desc)}</textarea></div>
+    <div class="sub"><h4>Checklist</h4><div id="clList"></div><div class="inline"><input type="text" id="clNew" placeholder="Nuova voce"><button type="button" class="btn sm" id="clAdd">Aggiungi</button></div></div>
+    <div class="sub"><h4>Check collegati</h4><div id="tkChecks"></div></div>
+    <div class="sub"><h4>Allegati dall'archivio</h4><div id="tkArch"></div>${isNew?"":`<button type="button" class="btn sm" id="tkAddArch">Aggiungi link o file</button>`}</div>
+    <div class="sub"><h4>Commenti</h4><div id="cmList"></div><textarea id="cmNew" placeholder="Scrivi un commento" style="min-height:60px"></textarea><div style="margin-top:6px"><button type="button" class="btn sm" id="cmAdd">Commenta</button></div></div>`,
+    `${isNew?"":`<button class="btn danger" value="delete" type="button" id="tkDel">Elimina</button>`}<span class="grow"></span><button class="btn" value="close">Annulla</button><button class="btn primary" value="save">Salva</button>`,
+    async()=>{
+      if(!fval("title")){ toast("Il titolo è obbligatorio"); return false; }
+      const before=S.tasks[t.id];
+      Object.assign(t,{title:fval("title"),status:fval("status"),phase:fval("phase"),step:fval("step"),assignee:fval("assignee"),due:fval("due"),desc:dlgForm.elements.desc.value,roles:froles()});
+      await store.put("tasks",t);
+      await log(before? (before.status!==t.status?`ha aggiornato "${t.title}" (stato: ${STATUSES.find(s=>s[0]===t.status)[1]})`:`ha modificato il task "${t.title}"`) : `ha creato il task "${t.title}"`);
+    });
+  renderSubs();
+  const autosave=async(msg)=>{ if(S.tasks[t.id]){ await store.put("tasks",{...S.tasks[t.id],checklist:t.checklist,comments:t.comments}); if(msg) await log(msg); } };
+  dlgForm.querySelector("#clAdd").onclick=()=>{ const i=dlgForm.querySelector("#clNew"); if(!i.value.trim()) return; t.checklist.push({text:i.value.trim(),done:false}); i.value=""; renderSubs(); autosave(); };
+  dlgForm.querySelector("#clList").addEventListener("change",e=>{ const d=e.target.dataset;
+    if(d.clDone!==undefined){ t.checklist[+d.clDone].done=e.target.checked; autosave(e.target.checked?`ha completato "${t.checklist[+d.clDone].text}" in "${t.title}"`:null); }
+    if(d.clText!==undefined){ t.checklist[+d.clText].text=e.target.value; autosave(); } });
+  dlgForm.querySelector("#clList").addEventListener("click",e=>{ const b=e.target.closest("[data-cl-del]"); if(b){ t.checklist.splice(+b.dataset.clDel,1); renderSubs(); autosave(); } });
+  dlgForm.querySelector("#cmAdd").onclick=async()=>{ const i=dlgForm.querySelector("#cmNew"); const v=i.value.trim(); if(!v) return;
+    t.comments.push({by:me,at:new Date().toISOString(),text:v}); i.value=""; renderSubs();
+    if(S.tasks[t.id]) await autosave(`ha commentato "${t.title}"`); else toast("Il commento sarà salvato con il task"); };
+  const del=dlgForm.querySelector("#tkDel"); if(del) del.onclick=async()=>{ if(confirm("Eliminare il task?")){ await store.del("tasks",t.id); await log(`ha eliminato il task "${t.title}"`); dlg.close(); } };
+  const aa=dlgForm.querySelector("#tkAddArch"); if(aa) aa.onclick=()=>{ dlg.close(); openArchive(null,{task:t.id,phase:t.phase}); };
+}
+
+function openStep(s, phase){
+  const isNew=!s; s = s ? {...s} : {id:uid(),phase,order:Object.values(S.steps).filter(x=>x.phase===phase).length,what:"",tool:"",output:"",purpose:"",roles:[],status:"todo"};
+  showDlg(isNew?"Nuovo step":"Modifica step",
+    `<div class="field"><label>Cosa</label><input type="text" name="what" value="${esc(s.what)}" required></div>
+    <div class="grid2"><div class="field"><label>Strumento</label><input type="text" name="tool" value="${esc(s.tool)}"></div>
+    <div class="field"><label>Output</label><input type="text" name="output" value="${esc(s.output)}"></div>
+    <div class="field"><label>A cosa serve</label><input type="text" name="purpose" value="${esc(s.purpose)}"></div>
+    <div class="field"><label>Fase</label>${phaseSelect(s.phase)}</div>
+    <div class="field"><label>Posizione</label><input type="text" inputmode="numeric" name="order" value="${s.order+1}"></div>
+    <div class="field"><label>Stato manuale (se nessun task collegato)</label><select name="status">${STATUSES.map(([k,l])=>`<option value="${k}" ${k===s.status?"selected":""}>${l}</option>`).join("")}</select></div></div>
+    <div class="field"><label>Chi</label>${roleChecks(s.roles)}</div>`,
+    `${isNew?"":`<button type="button" class="btn danger" id="stDel">Elimina</button>`}<span class="grow"></span><button class="btn" value="close">Annulla</button><button class="btn primary" value="save">Salva</button>`,
+    async()=>{ if(!fval("what")){ toast("Il campo Cosa è obbligatorio"); return false; }
+      const pos=Math.max(1,parseInt(fval("order"))||1)-1;
+      Object.assign(s,{what:fval("what"),tool:fval("tool"),output:fval("output"),purpose:fval("purpose"),phase:fval("phase")||s.phase,status:fval("status"),roles:froles()});
+      const sib=Object.values(S.steps).filter(x=>x.phase===s.phase&&x.id!==s.id).sort((a,b)=>a.order-b.order);
+      sib.splice(Math.min(pos,sib.length),0,s);
+      for(let i=0;i<sib.length;i++){ const x=sib[i]; if(x===s||x.order!==i) await store.put("steps",{...x,order:i}); }
+      await log(`${isNew?"ha aggiunto":"ha modificato"} lo step "${s.what}" (${phaseName(s.phase)})`); });
+  const d=dlgForm.querySelector("#stDel"); if(d) d.onclick=async()=>{ if(confirm("Eliminare lo step?")){ await store.del("steps",s.id); await log(`ha eliminato lo step "${s.what}"`); dlg.close(); } };
+}
+
+function openPhase(p){
+  const isNew=!p; p = p ? {...p} : {id:uid(),name:"",desc:"",order:Object.keys(S.phases).length};
+  showDlg(isNew?"Nuova fase":"Modifica fase",
+    `<div class="field"><label>Nome</label><input type="text" name="name" value="${esc(p.name)}" required></div><div class="field"><label>Descrizione</label><textarea name="desc">${esc(p.desc)}</textarea></div>`,
+    `${isNew?"":`<button type="button" class="btn danger" id="phDel">Elimina</button>`}<span class="grow"></span><button class="btn" value="close">Annulla</button><button class="btn primary" value="save">Salva</button>`,
+    async()=>{ if(!fval("name")) return false; p.name=fval("name"); p.desc=dlgForm.elements.desc.value; await store.put("phases",p); await log(`${isNew?"ha creato":"ha modificato"} la fase "${p.name}"`); });
+  const d=dlgForm.querySelector("#phDel"); if(d) d.onclick=async()=>{
+    const n=Object.values(S.steps).filter(s=>s.phase===p.id).length;
+    if(confirm(`Eliminare la fase "${p.name}"${n?` e i suoi ${n} step`:""}? I task restano, senza fase.`)){ for(const s of Object.values(S.steps).filter(s=>s.phase===p.id)) await store.del("steps",s.id); await store.del("phases",p.id); await log(`ha eliminato la fase "${p.name}"`); dlg.close(); } };
+}
+
+function openArchive(a, preset){
+  const isNew=!a; a = a ? {...a} : {id:uid(),title:"",url:"",note:"",phase:"",task:"",by:me,at:new Date().toISOString(),...preset};
+  const taskOpts=Object.values(S.tasks).sort((x,y)=>x.title.localeCompare(y.title,"it")).map(t=>`<option value="${esc(t.id)}" ${t.id===a.task?"selected":""}>${esc(t.title)}</option>`).join("");
+  showDlg(isNew?"Aggiungi all'archivio":"Modifica elemento",
+    `<div class="field"><label>Link (Google Drive, documento, cartella, immagine o sito)</label><input type="url" name="url" value="${esc(a.url)}" required placeholder="https://drive.google.com/…"></div>
+    <div class="field"><label>Titolo</label><input type="text" name="title" value="${esc(a.title)}"></div>
+    <div class="grid2"><div class="field"><label>Fase</label>${phaseSelect(a.phase)}</div><div class="field"><label>Task collegato</label><select name="task"><option value="">Nessuno</option>${taskOpts}</select></div></div>
+    <div class="field"><label>Nota</label><textarea name="note">${esc(a.note)}</textarea></div>`,
+    `${isNew?"":`<button type="button" class="btn danger" id="arDel">Elimina</button>`}<span class="grow"></span><button class="btn" value="close">Annulla</button><button class="btn primary" value="save">Salva</button>`,
+    async()=>{ const url=fval("url"); try{ new URL(url); }catch(e){ toast("Link non valido"); return false; }
+      Object.assign(a,{url,title:fval("title")||url,phase:fval("phase"),task:fval("task"),note:dlgForm.elements.note.value});
+      await store.put("archive",a); await log(`${isNew?"ha archiviato":"ha modificato"} "${a.title}"`); });
+  const d=dlgForm.querySelector("#arDel"); if(d) d.onclick=async()=>{ if(confirm("Eliminare dall'archivio?")){ await store.del("archive",a.id); await log(`ha rimosso "${a.title}" dall'archivio`); dlg.close(); } };
+}
+
+function openTerm(g){
+  const isNew=!g; g = g ? {...g} : {id:uid(),term:"",def:"",link:""};
+  showDlg(isNew?"Nuovo termine":"Modifica termine",
+    `<div class="field"><label>Termine</label><input type="text" name="term" value="${esc(g.term)}" required></div>
+    <div class="field"><label>Spiegazione breve</label><textarea name="def">${esc(g.def)}</textarea></div>
+    <div class="field"><label>Link di approfondimento (facoltativo)</label><input type="url" name="link" value="${esc(g.link)}"></div>`,
+    `${isNew?"":`<button type="button" class="btn danger" id="gDel">Elimina</button>`}<span class="grow"></span><button class="btn" value="close">Annulla</button><button class="btn primary" value="save">Salva</button>`,
+    async()=>{ if(!fval("term")) return false; Object.assign(g,{term:fval("term"),def:dlgForm.elements.def.value.trim(),link:fval("link")}); await store.put("glossary",g); await log(`${isNew?"ha aggiunto":"ha modificato"} il termine "${g.term}"`); });
+  const d=dlgForm.querySelector("#gDel"); if(d) d.onclick=async()=>{ if(confirm("Eliminare il termine?")){ await store.del("glossary",g.id); dlg.close(); } };
+}
+$("#newTask").onclick=()=>openTask(null);
+
+/* ============ CHECK ============ */
+function renderChecks(){
+  const all=Object.values(S.checks).sort((a,b)=>(a.order??0)-(b.order??0));
+  const hide=$("#checkHideDone").checked;
+  const list=all.filter(c=>!hide||!c.done);
+  $("#checkProg").textContent = all.length ? `${all.filter(c=>c.done).length}/${all.length} completati` : "";
+  $("#checkGrid").innerHTML = list.length ? list.map(c=>{ const img=(c.images||[])[0];
+    return `<div class="chk ${c.done?"done":""}" role="button" tabindex="0" data-chk="${esc(c.id)}">
+      <input type="checkbox" data-chk-done="${esc(c.id)}" ${c.done?"checked":""} aria-label="Completato">
+      <div style="flex:1;min-width:0"><div class="t">${esc(c.title)}</div>${c.subtitle?`<div class="s">${esc(c.subtitle)}</div>`:""}
+      <div class="meta">${c.task&&S.tasks[c.task]?`<span>Task: ${esc(S.tasks[c.task].title)}</span>`:""}${(c.links||[]).length?`<span>${c.links.length} link</span>`:""}${(c.images||[]).length?`<span>${c.images.length} immagini</span>`:""}${(c.comments||[]).length?`<span>${c.comments.length} commenti</span>`:""}</div></div>
+      ${img?`<img class="thumb" src="${esc(img)}" alt="">`:""}</div>`; }).join("")
+    : `<div class="empty" style="grid-column:1/-1">Nessun argomento. Aggiungine uno per tenere traccia di verifiche e decisioni.</div>`;
+}
+$("#checkHideDone").addEventListener("change",renderChecks);
+$("#newCheck").onclick=()=>openCheck(null);
+$("#checkGrid").addEventListener("click",async e=>{
+  const d=e.target.closest("[data-chk-done]");
+  if(d){ e.stopPropagation(); const c=S.checks[d.dataset.chkDone]; await store.put("checks",{...c,done:d.checked}); await log(`${d.checked?"ha completato":"ha riaperto"} il check "${c.title}"`); return; }
+  const c=e.target.closest("[data-chk]"); if(c) openCheck(S.checks[c.dataset.chk]);
+});
+$("#checkGrid").addEventListener("keydown",e=>{ const c=e.target.closest("[data-chk]"); if(c&&e.target===c&&(e.key==="Enter"||e.key===" ")){ e.preventDefault(); openCheck(S.checks[c.dataset.chk]); } });
+
+function resizeImage(file){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>{ const im=new Image(); im.onload=()=>{ const max=1400; const k=Math.min(1,max/Math.max(im.width,im.height)); const cv=document.createElement("canvas"); cv.width=Math.round(im.width*k); cv.height=Math.round(im.height*k); cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height); res(cv.toDataURL("image/jpeg",.8)); }; im.onerror=rej; im.src=r.result; }; r.onerror=rej; r.readAsDataURL(file); }); }
+
+function openCheck(c){
+  const isNew=!c; c = c ? JSON.parse(JSON.stringify(c)) : {id:uid(),title:"",subtitle:"",desc:"",done:false,phase:"",task:"",roles:[],links:[],images:[],comments:[],order:Date.now(),by:me,at:new Date().toISOString()};
+  const taskOpts=Object.values(S.tasks).sort((x,y)=>x.title.localeCompare(y.title,"it")).map(t=>`<option value="${esc(t.id)}" ${t.id===c.task?"selected":""}>${esc(t.title)}</option>`).join("");
+  const persist=async(msg)=>{ if(S.checks[c.id]){ await store.put("checks",{...S.checks[c.id],links:c.links,images:c.images,comments:c.comments}); if(msg) await log(msg); } };
+  const renderSubs=()=>{
+    dlgForm.querySelector("#ckLinks").innerHTML = c.links.map((l,i)=>`<div class="cl-row"><span>${KIND_ICON[archKind(l.url)]}</span><a href="${esc(l.url)}" target="_blank" rel="noopener" style="flex:1;overflow-wrap:anywhere">${esc(l.title||l.url)}</a><button type="button" class="btn ghost sm" data-lk-del="${i}">Rimuovi</button></div>`).join("") || `<p style="color:var(--muted);margin:0 0 8px">Nessun link.</p>`;
+    dlgForm.querySelector("#ckImgs").innerHTML = c.images.map((src,i)=>`<figure><img src="${esc(src)}" alt="Immagine ${i+1}" data-zoom><button type="button" class="btn sm" data-im-del="${i}">Rimuovi</button></figure>`).join("");
+    dlgForm.querySelector("#ckCm").innerHTML = c.comments.length ? c.comments.map(x=>`<div class="comment"><div class="by">${esc(x.by)} · ${fmtDate(x.at)}</div><div>${linkify(x.text).replace(/\n/g,"<br>")}</div></div>`).join("") : `<p style="color:var(--muted);margin:0 0 8px">Nessun commento.</p>`;
+  };
+  showDlg(isNew?"Nuovo argomento":"Check",
+    `<div class="field"><label>Titolo</label><input type="text" name="title" value="${esc(c.title)}" required></div>
+    <div class="field"><label>Sottotitolo</label><input type="text" name="subtitle" value="${esc(c.subtitle)}"></div>
+    <div class="grid2">
+      <div class="field"><label>Fase</label>${phaseSelect(c.phase)}</div>
+      <div class="field"><label>Attività collegata</label><select name="task"><option value="">Nessuna</option>${taskOpts}</select></div>
+    </div>
+    <div class="field"><label><input type="checkbox" name="done" ${c.done?"checked":""}> Completato</label></div>
+    <div class="field"><label>Ruoli</label>${roleChecks(c.roles)}</div>
+    <div class="field"><label>Dettagli</label><textarea name="desc">${esc(c.desc)}</textarea></div>
+    <div class="sub"><h4>Link</h4><div id="ckLinks"></div><div class="inline"><input type="url" id="lkUrl" placeholder="https://…"><input type="text" id="lkTitle" placeholder="Titolo (facoltativo)"><button type="button" class="btn sm" id="lkAdd">Aggiungi</button></div></div>
+    <div class="sub"><h4>Immagini</h4><div class="gallery" id="ckImgs"></div>
+      <div class="inline"><label class="btn sm" for="imFile">Carica immagini</label><input type="file" id="imFile" accept="image/*" multiple class="hidden"><input type="url" id="imUrl" placeholder="oppure link a un'immagine"><button type="button" class="btn sm" id="imAdd">Aggiungi</button></div>
+      <p style="color:var(--muted);font-size:.82rem;margin:6px 0 0">Le immagini caricate vengono ridotte a 1400 px. Per file pesanti usa un link Drive.</p></div>
+    <div class="sub"><h4>Commenti</h4><div id="ckCm"></div><textarea id="ckCmNew" placeholder="Scrivi un commento" style="min-height:60px"></textarea><div style="margin-top:6px"><button type="button" class="btn sm" id="ckCmAdd">Commenta</button></div></div>`,
+    `${isNew?"":`<button type="button" class="btn danger" id="ckDel">Elimina</button><button type="button" class="btn" id="ckToTask">Crea attività</button>`}<span class="grow"></span><button class="btn" value="close">Annulla</button><button class="btn primary" value="save">Salva</button>`,
+    async()=>{ if(!fval("title")){ toast("Il titolo è obbligatorio"); return false; }
+      Object.assign(c,{title:fval("title"),subtitle:fval("subtitle"),phase:fval("phase"),task:fval("task"),done:dlgForm.elements.done.checked,desc:dlgForm.elements.desc.value,roles:froles()});
+      await store.put("checks",c); await log(`${isNew?"ha aggiunto":"ha modificato"} il check "${c.title}"`); });
+  renderSubs();
+  const q=x=>dlgForm.querySelector(x);
+  q("#lkAdd").onclick=()=>{ const u=q("#lkUrl").value.trim(); try{ new URL(u); }catch(e){ toast("Link non valido"); return; } c.links.push({url:u,title:q("#lkTitle").value.trim()}); q("#lkUrl").value=""; q("#lkTitle").value=""; renderSubs(); persist(); };
+  q("#ckLinks").addEventListener("click",e=>{ const b=e.target.closest("[data-lk-del]"); if(b){ c.links.splice(+b.dataset.lkDel,1); renderSubs(); persist(); } });
+  q("#imFile").onchange=async e=>{ for(const f of e.target.files){ try{ c.images.push(await resizeImage(f)); }catch(err){ toast("Immagine non leggibile"); } } e.target.value=""; renderSubs(); persist(); };
+  q("#imAdd").onclick=()=>{ const u=q("#imUrl").value.trim(); try{ new URL(u); }catch(e){ toast("Link non valido"); return; } c.images.push(u); q("#imUrl").value=""; renderSubs(); persist(); };
+  q("#ckImgs").addEventListener("click",e=>{ const z=e.target.closest("[data-zoom]"); if(z){ z.classList.toggle("big"); return; } const b=e.target.closest("[data-im-del]"); if(b){ c.images.splice(+b.dataset.imDel,1); renderSubs(); persist(); } });
+  q("#ckCmAdd").onclick=async()=>{ const v=q("#ckCmNew").value.trim(); if(!v) return; c.comments.push({by:me,at:new Date().toISOString(),text:v}); q("#ckCmNew").value=""; renderSubs(); if(S.checks[c.id]) await persist(`ha commentato il check "${c.title}"`); else toast("Il commento sarà salvato con l'argomento"); };
+  const del=q("#ckDel"); if(del) del.onclick=async()=>{ if(confirm("Eliminare l'argomento?")){ await store.del("checks",c.id); await log(`ha eliminato il check "${c.title}"`); dlg.close(); } };
+  const tt=q("#ckToTask"); if(tt) tt.onclick=async()=>{ const t={id:uid(),title:c.title,desc:[c.subtitle,c.desc].filter(Boolean).join("\n\n"),status:"todo",phase:c.phase,step:"",roles:[...(c.roles||[])],assignee:"",due:"",checklist:[],comments:[],order:Date.now()};
+    await store.put("tasks",t); await store.put("checks",{...S.checks[c.id],task:t.id}); await log(`ha creato l'attività "${t.title}" dal check`); dlg.close(); toast("Attività creata nella board"); };
+}
+</script>
+</body>
+</html>
