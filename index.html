@@ -292,10 +292,15 @@ alter publication supabase_realtime add table pm_items;</pre>
 <script>
 /* ============ CONFIG ============ */
 const SUPABASE_URL = "https://ipplyoqoemhsvezlzvpe.supabase.co";
-const SUPABASE_ANON_KEY = "INCOLLA_QUI_LA_PUBLISHABLE_KEY"; // chiave pubblicabile: la sicurezza è nella RLS
+const SUPABASE_ANON_KEY = "sb_publishable__env6LWI1Kd9WIX3WBsjxA_HgiNdE07"; // chiave pubblicabile: la sicurezza è nella RLS
 // Utenti: nome visualizzato -> email dell'utente creato in Supabase Authentication
 // Facoltativo: associa email -> nome visualizzato (altrimenti usa la parte prima della @)
-const USER_EMAILS = {};
+const USER_EMAILS = {
+  "Edoardo": "edoardo.parini@snaproof.net",
+  "Simone": "simone.casciaro@snaproof.net",
+  "Alex": "alex.redaelli@snaproof.net"
+};
+const EMAIL_ALIASES = { "parini.edoardo@gmail.com": "Edoardo" };
 const USERS = Object.keys(USER_EMAILS);
 const BUCKET = "attachments";
 /* ================================= */
@@ -476,7 +481,7 @@ const imgTag=(src,attrs)=> isStorage(src) ? `<img data-sp="${esc(src.slice(8))}"
 const inClaude = !!(window.claude && window.claude.use) || /claude\.ai|claudeusercontent/.test(location.hostname);
 const useSupa = !inClaude && !!(SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase);
 if(useSupa){ supa=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY); }
-const nameFor = user => { const em=user?.email||""; const known=Object.keys(USER_EMAILS).find(k=>USER_EMAILS[k].toLowerCase()===em.toLowerCase()); if(known) return known; const md=user?.user_metadata||{}; if(md.name||md.full_name) return md.name||md.full_name; const n=em.split("@")[0]||"utente"; return n.charAt(0).toUpperCase()+n.slice(1); };
+const nameFor = user => { const em=user?.email||""; const known=Object.keys(USER_EMAILS).find(k=>USER_EMAILS[k].toLowerCase()===em.toLowerCase()); if(known) return known; if(EMAIL_ALIASES[em.toLowerCase()]) return EMAIL_ALIASES[em.toLowerCase()]; const md=user?.user_metadata||{}; if(md.name||md.full_name) return md.name||md.full_name; const n=em.split("@")[0]||"utente"; return n.charAt(0).toUpperCase()+n.slice(1); };
 $("#emailList").innerHTML=Object.values(USER_EMAILS).map(e=>`<option value="${esc(e)}">`).join("");
 if(ls("flowpm:email")) $("#gEmail").value=ls("flowpm:email");
 
